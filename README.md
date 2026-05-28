@@ -1,0 +1,149 @@
+<div align="center">
+
+```
+        \,/                     \,/
+      ___)(_____________________)(___
+     /                              \
+    |    (o)                  (o)    |
+    |              ____              |
+     \            / vv \            /
+      \__________/      \__________/
+        /   \              /   \
+       /     \            /     \
+```
+
+# 🦀 Clawd on Ditoo
+
+**A tiny orange crab who lives on your Divoom Ditoo Pro, judges your code, and naps when you walk away.**
+
+*He blinks. He thinks when Claude thinks. He throws a gear when you call a tool, a heart when you ship, and a tiny existential crisis when you don't. Clap once to poke him. Clap twice to put him to bed. He speaks fluent chiptune.*
+
+</div>
+
+---
+
+## Wait, what is this
+
+Clawd is a pixel pet for the **Divoom Ditoo Pro** (that little 16×16 retro speaker-with-a-screen). He reacts to your [Claude Code](https://claude.com/claude-code) sessions in real time — idle, thinking, tool-use, celebration, panic, sleep — and chirps about it out of the Ditoo's own speaker while your music keeps playing wherever you like. He is, frankly, the most emotionally available coworker you'll have.
+
+> 📊 Built measurement-first, because we have *standards*. The real latency/throughput numbers are in **[FINDINGS.md](FINDINGS.md)**.
+
+## The catch (it's a fun one)
+
+The Ditoo line is **Bluetooth-only** — no Wi-Fi — so every "just use the Pixoo HTTP API" tutorial on the internet is, for our purposes, a beautiful lie. And despite what the write-ups claim, the Ditoo **Pro shows up as a single Bluetooth device** (`DitooPro-Audio`). There is no separate `-Light` device. That was a red herring and we fell for it so you don't have to. Pixel control rides a serial channel **on that same device — RFCOMM channel 2.**
+
+```
+Claude Code hooks ─POST localhost:7878─► Pet daemon (Python, stdlib only)
+                                          │
+   ┌──────────────────────────────────────┼───────────────────────────────┐
+   │ state machine → 16×16 sprites         │ chiptune + spoken sounds       │  clap events
+   ▼                                       ▼                                ▲
+ ditoo-bridge (Swift/IOBluetooth)     ditoo-play (Swift/CoreAudio)     ditoo-ears (Swift/AVFoundation)
+   │ RFCOMM ch 2                        │ routes audio to the Ditoo        │ taps the MacBook mic
+   ▼                                    ▼                                  │ (keeps the Ditoo's
+ Divoom Ditoo Pro — pixels           Divoom Ditoo Pro — speaker            │  audio full-quality)
+```
+
+Three tiny Swift helpers because each macOS audio/Bluetooth API is native-only and refuses to be reasoned with. Everything else is Python, so the crab stays hackable.
+
+## The easy way: just give me the crab 🦀
+
+Build the menu-bar app once and never touch a terminal again:
+
+```bash
+./clawd_app/build.sh        # produces clawd_app/Clawd.app
+open clawd_app/Clawd.app     # a little crab appears in your menu bar
+```
+
+First launch, the app will ask for **Bluetooth** and **Microphone** — say yes, that's how he sees the Ditoo and hears your claps. Then from the menu bar:
+
+1. **Settings…** → pop in your Ditoo's MAC (find it with `./bench/discover.sh`), tweak anything you like.
+2. **Start Clawd** → he hatches with a wake chirp.
+3. **✓ Launch at Login** → and now he just *exists*, forever, like a good crab.
+
+> 🔐 Why a menu-bar app and not a daemon you `sudo` into oblivion? macOS pins Bluetooth/Mic permission to whatever *launches* the thing. The app owns the daemon, so you grant permission **once** and it sticks. You're welcome.
+
+## The terminal way (for the brave / the headless)
+
+```bash
+# 1. Find your Ditoo's MAC + confirm the pixel channel is RFCOMM 2
+./bench/discover.sh
+
+# 2. Bring him to life (he hatches with a chirp + "Hi! I'm Clawd")
+./bin/clawd start --foreground --mac AA:BB:CC:DD:EE:FF -v
+
+# 3. Wire him into your coding (reacts to your real Claude Code sessions)
+./bin/clawd install-hooks
+```
+
+Replace `AA:BB:CC:DD:EE:FF` with *your* MAC. We're not putting ours on the internet again. 🙃
+
+## How to play
+
+- 👏 **clap once** → poke him (startle + heart + bip)
+- 👏👏 **clap twice fast** → tuck him in / wake him up
+- 🚶 **wander off ~4 min** → he yawns and naps
+
+## Settings: he's high-maintenance (lovingly)
+
+Every knob lives in `~/.clawd/config.json` — **sounds, voice, mic, animations, sleep**. The daemon applies most changes **live** (no restart): volume, brightness, nap timer, fidget frequency, clap sensitivity, the works.
+
+Change them three ways: the **Settings window** in the menu-bar app, by hand, or via CLI:
+
+```bash
+clawd config                                    # show everything
+clawd config set animations.brightness 40       # dim the mood lighting
+clawd config set voice.babble false             # tell him to stop muttering
+clawd config set sleep.idle_to_sleep_seconds 600  # night owl mode
+```
+
+A few settings (`device.mac`, `device.channel`, `sounds.audio_device`) need a restart — the CLI will tell you which.
+
+## Make him yours
+
+- **Sprites** — `divoom_pet/sprites/clawd.py` (16-row strings, one char per pixel). Regenerate the gallery: `python3 -m divoom_pet.sprites.clawd previews/`.
+- **Voice** — `divoom_pet/voice/sounds.py`: `CHIRPS` (chiptune melodies, multiple random variants each), `SPOKEN` (TTS one-liners), and an animalese-style babble so he can mutter to himself. Audition: `clawd sounds preview`.
+- **Vibes** — `AUTO_TIMEOUTS` / idle behavior in `divoom_pet/daemon/state_machine.py` and the idle fidget weights in `clawd.py`.
+
+## The full CLI
+
+```
+clawd start [--mac MAC] [--simulate] [--no-sound] [--no-ears] [--foreground] [-v]
+clawd stop
+clawd state [--set STATE]              poke the state machine directly
+clawd poke / chirp / demo              mess with him
+clawd sounds [preview|render]          audition / rebuild the voice
+clawd config [show | set K V]          read / change settings
+clawd doctor                           "is the crab okay??"
+clawd install-hooks                    wire into Claude Code
+```
+
+States: `idle thinking typing tool_use happy alert sleeping hatch poke`.
+
+## Under the shell
+
+```
+ditoo_bridge/   Swift — Bluetooth pixel bridge (RFCOMM ch 2)
+ditoo_audio/    Swift — ditoo-play, device-routed audio (+ warm-engine serve)
+ditoo_ears/     Swift — ditoo-ears, clap detection on the Mac mic
+clawd_app/      Swift — the menu-bar app (status, settings, tray crab)
+divoom_pet/
+  protocol/     Divoom packet builder (byte-identical to hass-divoom; unit-tested)
+  sprites/      16×16 Clawd + states + the lively idle loop
+  voice/        chiptune synth + routed player
+  daemon/       HTTP server, state machine, bridge/ears drivers, live config
+  hooks/        Claude Code hook dispatcher
+bench/          the measurement harness that earned FINDINGS.md its receipts
+previews/       PNGs + GIFs of every mood
+```
+
+## Credits & gratitude
+
+- Protocol reverse-engineering: [hass-divoom](https://github.com/d03n3rfr1tz3/hass-divoom), [node-divoom-timebox-evo](https://github.com/RomRider/node-divoom-timebox-evo/blob/0.3.0/PROTOCOL.md), and [andreas-mausch's Ditoo Pro writeup](https://andreas-mausch.de/blog/2023-08-14-divoom-ditoo-pro/).
+- Anthropic orange `#d97757`. Clawd is the community Claude Code mascot, now slightly more crab-shaped.
+
+<div align="center">
+
+*Be nice to Clawd. He's doing his best.* 🦀
+
+</div>
