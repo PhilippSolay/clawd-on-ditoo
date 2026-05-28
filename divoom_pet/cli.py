@@ -1,0 +1,404 @@
+"""Top-level user CLI: clawd start|stop|state|demo|install-hooks|doctor."""
+
+from __future__ import annotations
+
+import argparse
+import json
+import os
+import subprocess
+import sys
+import time
+from pathlib import Path
+from typing import Optional
+from urllib import error as urllib_error
+from urllib import request as urllib_request
+
+DEFAULT_URL = os.environ.get("CLAWD_DAEMON_URL", "http://127.0.0.1:7878")
+ROOT = Path(__file__).resolve().parent.parent
+
+
+def _post(url: str, body: dict, timeout: float = 1.0) -> Optional[dict]:
+    data = json.dumps(body).encode("utf-8")
+    req = urllib_request.Request(url, data=data, headers={"Content-Type": "application/json"}, method="POST")
+    try:
+        with urllib_request.urlopen(req, timeout=timeout) as r:
+            return json.loads(r.read().decode("utf-8"))
+    except (urllib_error.URLError, urllib_error.HTTPError, ConnectionError, OSError) as e:
+        print(f"daemon error: {e}", file=sys.stderr)
+        return None
+
+
+def _get(url: str, timeout: float = 1.0) -> Optional[dict]:
+    try:
+        with urllib_request.urlopen(url, timeout=timeout) as r:
+            return json.loads(r.read().decode("utf-8"))
+    except (urllib_error.URLError, urllib_error.HTTPError, ConnectionError, OSError) as e:
+        return None
+
+
+# ---------- subcommands ----------
+
+
+def cmd_start(args) -> int:
+    server_args = [sys.executable, "-m", "divoom_pet.daemon.server"]
+    if args.simulate:
+        server_args.append("--simulate")
+    else:
+        if args.mac:
+            server_args += ["--mac", args.mac]
+        if args.channel:
+            server_args += ["--channel", str(args.channel)]
+    if args.no_sound:
+        server_args.append("--no-sound")
+    if args.no_ears:
+        server_args.append("--no-ears")
+    if args.audio_device:
+        server_args += ["--audio-device", args.audio_device]
+    if args.verbose:
+        server_args.append("-v")
+    if args.foreground:
+        os.execv(sys.executable, server_args)
+        return 0  # unreachable
+
+    log_path = Path.home() / ".clawd" / "daemon.log"
+    log_path.parent.mkdir(parents=True, exist_ok=True)
+    with open(log_path, "ab", buffering=0) as fh:
+        proc = subprocess.Popen(
+            server_args,
+            stdout=fh, stderr=subprocess.STDOUT,
+            stdin=subprocess.DEVNULL,
+            start_new_session=True,
+        )
+    pid_path = Path.home() / ".clawd" / "daemon.pid"
+    pid_path.write_text(str(proc.pid))
+    print(f"clawd started (pid={proc.pid}). logs: {log_path}")
+    return 0
+
+
+def cmd_stop(args) -> int:
+    pid_path = Path.home() / ".clawd" / "daemon.pid"
+    if not pid_path.exists():
+        # Try HTTP shutdown anyway
+        if _post(f"{DEFAULT_URL}/shutdown", {}):
+            print("daemon told to shut down via http.")
+            return 0
+        print("no pidfile and daemon is not responding.")
+        return 1
+    pid = int(pid_path.read_text().strip())
+    _post(f"{DEFAULT_URL}/shutdown", {})  # request graceful first
+    time.sleep(0.5)
+    try:
+        os.kill(pid, 0)
+        os.kill(pid, 15)  # SIGTERM
+        print(f"sent SIGTERM to {pid}")
+    except ProcessLookupError:
+        print(f"daemon (pid={pid}) already gone.")
+    pid_path.unlink(missing_ok=True)
+    return 0
+
+
+def cmd_state(args) -> int:
+    if args.set:
+        out = _post(f"{DEFAULT_URL}/state", {"state": args.set, "note": args.note or ""})
+        if not out:
+            return 2
+        print(json.dumps(out))
+        return 0
+    out = _get(f"{DEFAULT_URL}/healthz")
+    if not out:
+        print("daemon not responding")
+        return 2
+    print(json.dumps(out, indent=2))
+    return 0
+
+
+DEMO_SEQUENCE = [
+    ("hatch", 3.5, "Hello! I'm Clawd."),
+    ("thinking", 3.0, "Working on something."),
+    ("typing", 2.0, ""),
+    ("tool_use", 3.5, "Edit"),
+    ("happy", 2.6, "Done!"),
+    ("alert", 2.8, "Uh oh."),
+    ("sleeping", 4.0, ""),
+    ("idle", 2.0, ""),
+]
+
+
+def cmd_demo(args) -> int:
+    out = _get(f"{DEFAULT_URL}/healthz")
+    if not out:
+        print("daemon not running. start it first: clawd start --simulate (or with --mac)")
+        return 2
+    print("running demo sequence...")
+    for state, hold, note in DEMO_SEQUENCE:
+        r = _post(f"{DEFAULT_URL}/state", {"state": state, "note": note})
+        print(f"  -> {state}  ({note})" if note else f"  -> {state}")
+        time.sleep(hold)
+    print("demo complete. clawd is back in idle.")
+    return 0
+
+
+def cmd_poke(args) -> int:
+    r = _post(f"{DEFAULT_URL}/poke", {})
+    if not r:
+        return 2
+    print(json.dumps(r))
+    return 0
+
+
+def cmd_chirp(args) -> int:
+    body = {"chirp": args.name} if args.name else {}
+    if args.speak:
+        body["speak"] = args.speak
+    r = _post(f"{DEFAULT_URL}/sound", body)
+    if not r:
+        return 2
+    print(json.dumps(r))
+    return 0
+
+
+def cmd_sounds(args) -> int:
+    import subprocess
+    import time as _t
+    from divoom_pet.voice import sounds as snd
+
+    if args.action == "render":
+        paths = snd.render_all(force=True)
+        print(f"rendered {len(paths)} sounds into {snd.SOUNDS_DIR}")
+        return 0
+
+    # preview
+    paths = snd.render_all()
+    if not __import__("shutil").which("afplay"):
+        print("afplay not available")
+        return 2
+    print(f"Previewing Clawd's voice (output device = whatever your system default is).")
+    print("Set System Settings -> Sound -> Output -> Divoom Ditoo to hear it on the speaker.\n")
+    order = ["wake", "think", "tool", "done", "error", "sleep", "poke"]
+    for name in order:
+        p = paths.get(f"chirp_{name}")
+        if p:
+            print(f"  chirp: {name}")
+            subprocess.run(["afplay", str(p)])
+            _t.sleep(0.25)
+    print("\n  spoken lines:")
+    for name in ["hatch", "done", "error", "poke"]:
+        p = paths.get(f"say_{name}")
+        if p:
+            print(f"  say: {name}")
+            subprocess.run(["afplay", str(p)])
+            _t.sleep(0.25)
+    print("\n  That's Clawd's voice. Tweak it in divoom_pet/voice/sounds.py (CHIRPS / SPOKEN).")
+    return 0
+
+
+def cmd_doctor(args) -> int:
+    ok = True
+
+    def check(label, value, want):
+        global ok
+        s = "OK " if value == want else "FAIL"
+        print(f"  [{s}] {label}: {value}")
+
+    print("clawd doctor:")
+
+    # Swift bridge present?
+    bridge_app = ROOT / "ditoo_bridge" / "DitooBridge.app" / "Contents" / "MacOS" / "DitooBridge"
+    bridge_bin = ROOT / "ditoo_bridge" / "ditoo-bridge"
+    print(f"  bridge app exists:  {bridge_app.exists()}")
+    print(f"  bridge bin exists:  {bridge_bin.exists()}")
+
+    # macOS say available?
+    say_path = subprocess.check_output(["which", "say"], text=True, stderr=subprocess.DEVNULL).strip() if subprocess.run(["which", "say"], capture_output=True).returncode == 0 else ""
+    print(f"  macOS say:          {say_path or 'NOT FOUND'}")
+
+    # Bluetooth — see paired Divoom devices
+    try:
+        out = subprocess.check_output(["system_profiler", "SPBluetoothDataType"], text=True, stderr=subprocess.DEVNULL)
+        divoom_lines = [l.strip() for l in out.splitlines() if ("Divoom" in l or "Ditoo" in l or "Pixoo" in l) and ":" in l and "Address" not in l]
+        if divoom_lines:
+            print(f"  paired Divoom devices ({len(divoom_lines)}):")
+            for l in divoom_lines:
+                print(f"    {l}")
+        else:
+            print("  paired Divoom devices: none found")
+    except Exception as e:
+        print(f"  bluetooth scan failed: {e}")
+
+    # Daemon
+    out = _get(f"{DEFAULT_URL}/healthz")
+    print(f"  daemon @ {DEFAULT_URL}: {'OK ' + json.dumps(out) if out else 'not responding'}")
+
+    return 0
+
+
+def cmd_install_hooks(args) -> int:
+    """Install the clawd-hook references into ~/.claude/settings.json."""
+    hook_path = ROOT / "divoom_pet" / "hooks" / "clawd-hook"
+    if not hook_path.exists():
+        print(f"hook script missing: {hook_path}")
+        return 1
+    settings_dir = Path.home() / ".claude"
+    settings_path = settings_dir / "settings.json"
+    settings_dir.mkdir(parents=True, exist_ok=True)
+
+    if settings_path.exists():
+        try:
+            existing = json.loads(settings_path.read_text())
+        except json.JSONDecodeError as e:
+            print(f"existing settings.json is not valid JSON: {e}")
+            return 1
+        backup = settings_path.with_suffix(".json.bak")
+        backup.write_text(settings_path.read_text())
+        print(f"backed up existing settings to {backup}")
+    else:
+        existing = {}
+
+    hooks = existing.setdefault("hooks", {})
+
+    HOOK_EVENTS = {
+        "UserPromptSubmit": "prompt",
+        "PreToolUse": "pre-tool",
+        "PostToolUse": "post-tool",
+        "Notification": "alert",
+        "Stop": "stop",
+    }
+
+    for event, verb in HOOK_EVENTS.items():
+        cmd = f'"{hook_path}" {verb}'
+        bucket = hooks.setdefault(event, [])
+        # Don't double-add: skip if any entry's command already references clawd-hook.
+        already = any(
+            "clawd-hook" in (h.get("command", "") or "")
+            for group in bucket
+            for h in group.get("hooks", [])
+        )
+        if already:
+            continue
+        bucket.append({"hooks": [{"type": "command", "command": cmd}]})
+
+    settings_path.write_text(json.dumps(existing, indent=2) + "\n")
+    print(f"installed hooks into {settings_path}")
+    print("clawd will now react to UserPromptSubmit / PreToolUse / PostToolUse / Notification / Stop.")
+    print()
+    print("To start the daemon (in another terminal):")
+    print(f"  {ROOT}/bin/clawd start --mac <DITOO_LIGHT_MAC>")
+    print("  (or --simulate to test without hardware)")
+    return 0
+
+
+def _coerce(s: str):
+    """Turn a CLI string into a bool/int/float/None where it clearly is one,
+    otherwise leave it a string (so MACs and device names stay intact)."""
+    low = s.lower()
+    if low in ("true", "yes", "on"):
+        return True
+    if low in ("false", "no", "off"):
+        return False
+    if low in ("null", "none"):
+        return None
+    try:
+        return int(s)
+    except ValueError:
+        pass
+    try:
+        return float(s)
+    except ValueError:
+        pass
+    return s
+
+
+def cmd_config(args) -> int:
+    from divoom_pet.config import CONFIG_PATH, Config
+
+    if args.action == "set":
+        if not args.path or args.value is None:
+            print("usage: clawd config set <section.key> <value>", file=sys.stderr)
+            print("  e.g. clawd config set sounds.volume 0.4", file=sys.stderr)
+            return 2
+        section, _, key = args.path.partition(".")
+        if not key:
+            print("path must be section.key (e.g. animations.brightness)", file=sys.stderr)
+            return 2
+        partial = {section: {key: _coerce(args.value)}}
+        # Prefer the live daemon (applies immediately + persists); fall back to file.
+        out = _post(f"{DEFAULT_URL}/config", partial)
+        if out:
+            nr = out.get("needs_restart", [])
+            print(f"set {args.path} = {partial[section][key]!r}")
+            if nr:
+                print(f"  (restart needed to apply: {', '.join(nr)})")
+            return 0
+        cfg = Config.load().merged(partial)
+        cfg.save()
+        print(f"daemon not running — wrote {CONFIG_PATH} (applies on next start)")
+        return 0
+
+    # show
+    out = _get(f"{DEFAULT_URL}/config")
+    if not out:
+        out = Config.load().to_dict()
+        print("# daemon not running — showing config file:")
+    print(json.dumps(out, indent=2))
+    return 0
+
+
+# ---------- argparse ----------
+
+
+def main(argv=None) -> int:
+    parser = argparse.ArgumentParser(prog="clawd", description="Anthropic pet on your Divoom Ditoo.")
+    sub = parser.add_subparsers(dest="cmd", required=True)
+
+    p_start = sub.add_parser("start", help="Start the pet daemon")
+    p_start.add_argument("--mac", help="Ditoo BT MAC (pixel control)")
+    p_start.add_argument("--channel", type=int, default=2, help="RFCOMM channel (Ditoo Pro = 2)")
+    p_start.add_argument("--simulate", action="store_true", help="Skip Bluetooth; log frames only.")
+    p_start.add_argument("--no-sound", action="store_true", help="Disable audio")
+    p_start.add_argument("--no-ears", action="store_true", help="Disable clap detection")
+    p_start.add_argument("--audio-device", default=None, help="Output device for sounds (default DitooPro)")
+    p_start.add_argument("--foreground", action="store_true", help="Run in foreground (default: background)")
+    p_start.add_argument("-v", "--verbose", action="store_true")
+    p_start.set_defaults(func=cmd_start)
+
+    p_stop = sub.add_parser("stop", help="Stop the daemon")
+    p_stop.set_defaults(func=cmd_stop)
+
+    p_state = sub.add_parser("state", help="Get or set the current state")
+    p_state.add_argument("--set", help="state to set (idle/thinking/typing/tool_use/happy/alert/sleeping/hatch)")
+    p_state.add_argument("--note", help="optional note string")
+    p_state.set_defaults(func=cmd_state)
+
+    p_demo = sub.add_parser("demo", help="Cycle through all states with TTS")
+    p_demo.set_defaults(func=cmd_demo)
+
+    p_poke = sub.add_parser("poke", help="Poke Clawd (startle + delight reaction)")
+    p_poke.set_defaults(func=cmd_poke)
+
+    p_chirp = sub.add_parser("chirp", help="Play a chirp / spoken line through Clawd")
+    p_chirp.add_argument("name", nargs="?", help="chirp name: wake/think/tool/done/error/sleep/poke")
+    p_chirp.add_argument("--speak", help="pre-rendered spoken line: hatch/done/error/poke")
+    p_chirp.set_defaults(func=cmd_chirp)
+
+    p_sounds = sub.add_parser("sounds", help="Preview or re-render Clawd's voice")
+    p_sounds.add_argument("action", nargs="?", default="preview", choices=["preview", "render"])
+    p_sounds.set_defaults(func=cmd_sounds)
+
+    p_doctor = sub.add_parser("doctor", help="Diagnose setup")
+    p_doctor.set_defaults(func=cmd_doctor)
+
+    p_install = sub.add_parser("install-hooks", help="Install Claude Code hooks for Clawd")
+    p_install.set_defaults(func=cmd_install_hooks)
+
+    p_config = sub.add_parser("config", help="Show or change settings (sounds/voice/mic/animations/sleep)")
+    p_config.add_argument("action", nargs="?", default="show", choices=["show", "set"])
+    p_config.add_argument("path", nargs="?", help="section.key, e.g. sounds.volume")
+    p_config.add_argument("value", nargs="?", help="new value (for set)")
+    p_config.set_defaults(func=cmd_config)
+
+    args = parser.parse_args(argv)
+    return args.func(args)
+
+
+if __name__ == "__main__":
+    sys.exit(main())

@@ -1,0 +1,5 @@
+#!/bin/bash
+# Thin shim — invoke the clawd CLI module with the local source tree on PYTHONPATH.
+HERE=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
+export PYTHONPATH="$HERE${PYTHONPATH:+:$PYTHONPATH}"
+exec python3 -m divoom_pet.cli "$@"
