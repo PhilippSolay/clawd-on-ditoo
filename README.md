@@ -18,6 +18,8 @@
 
 *He blinks. He thinks when Claude thinks. He throws a gear when you call a tool, a heart when you ship, and a tiny existential crisis when you don't. Clap once to poke him. Clap twice to put him to bed. He speaks fluent chiptune.*
 
+### 🖥️ [Get the Mac app →](clawd_app/)
+
 </div>
 
 ---
@@ -48,7 +50,7 @@ Three tiny Swift helpers because each macOS audio/Bluetooth API is native-only a
 
 ## The easy way: just give me the crab 🦀
 
-Build the menu-bar app once and never touch a terminal again:
+Build the **[menu-bar app](clawd_app/)** once and never touch a terminal again:
 
 ```bash
 ./clawd_app/build.sh        # produces clawd_app/Clawd.app
