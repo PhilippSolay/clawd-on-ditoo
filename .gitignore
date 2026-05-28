@@ -1,0 +1,21 @@
+# macOS
+.DS_Store
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+
+# Swift / build artifacts
+.build/
+*.swiftmodule
+
+# Compiled helper binaries + .app bundles (rebuild via build.sh / README commands)
+/ditoo_bridge/ditoo-bridge
+/ditoo_audio/ditoo-play
+/ditoo_ears/ditoo-ears
+*.app/
+
+# Runtime / user data (lives in ~/.clawd, never in the repo)
+.clawd/
