@@ -345,6 +345,8 @@ def apply_config(new: Config, old: Config, controller: PetController,
         sounds.spoken_lines = new.voice.spoken_lines
         if new.sounds.volume != old.sounds.volume:
             sounds.set_volume(new.sounds.volume)
+        if new.sounds.theme != old.sounds.theme:
+            sounds.set_theme(new.sounds.theme)
         if new.voice.tts_voice != old.voice.tts_voice:
             sounds.set_tts_voice(new.voice.tts_voice)
         if new.sounds.audio_device != old.sounds.audio_device:
@@ -443,6 +445,7 @@ def main(argv=None) -> int:
         enabled=cfg.sounds.enabled, device=cfg.sounds.audio_device,
         volume=cfg.sounds.volume, babble=cfg.voice.babble,
         spoken_lines=cfg.voice.spoken_lines, tts_voice=cfg.voice.tts_voice,
+        theme=cfg.sounds.theme,
     )
     controller = PetController(
         bridge=bridge, sounds=sounds,

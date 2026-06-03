@@ -48,7 +48,7 @@ extension NSBezierPath {
 // MARK: - Config model (mirrors ~/.clawd/config.json; snake_case <-> camelCase)
 
 struct DeviceCfg: Codable { var mac: String? = nil; var channel: Int = 2 }
-struct SoundsCfg: Codable { var enabled = true; var volume = 0.6; var audioDevice = "DitooPro" }
+struct SoundsCfg: Codable { var enabled = true; var volume = 0.6; var audioDevice = "DitooPro"; var theme = "marimba" }
 struct VoiceCfg: Codable { var babble = true; var spokenLines = true; var ttsVoice: String? = nil }
 struct MicCfg: Codable { var enabled = true; var clapFloor = 0.06; var clapRise = 4.0; var doubleWindow = 0.55 }
 struct AnimationsCfg: Codable { var brightness = 70; var idleFidgets = true; var fidgetFrequency = 1.0; var blink = true }
@@ -242,6 +242,12 @@ struct SettingsView: View {
             }
             Section("Sounds") {
                 Toggle("Sounds enabled", isOn: $ctl.config.sounds.enabled)
+                Picker("Theme", selection: $ctl.config.sounds.theme) {
+                    Text("Marimba (warm)").tag("marimba")
+                    Text("Music box").tag("music_box")
+                    Text("Bubbly").tag("bubbly")
+                    Text("Chiptune (retro)").tag("chip")
+                }
                 slider("Volume", value: $ctl.config.sounds.volume, 0, 1, "%.2f")
                 TextField("Output device", text: $ctl.config.sounds.audioDevice)
                     .textFieldStyle(.roundedBorder)

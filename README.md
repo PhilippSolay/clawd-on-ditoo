@@ -104,7 +104,12 @@ A few settings (`device.mac`, `device.channel`, `sounds.audio_device`) need a re
 ## Make him yours
 
 - **Sprites** — `divoom_pet/sprites/clawd.py` (16-row strings, one char per pixel). Regenerate the gallery: `python3 -m divoom_pet.sprites.clawd previews/`.
-- **Voice** — `divoom_pet/voice/sounds.py`: `CHIRPS` (chiptune melodies, multiple random variants each), `SPOKEN` (TTS one-liners), and an animalese-style babble so he can mutter to himself. Audition: `clawd sounds preview`.
+- **Voice** — switchable **sound themes** in `divoom_pet/voice/themes.py`: `marimba`
+  (warm mallet, default), `music_box` (bell + echo), `bubbly` (pitch-glide bloops),
+  and `chip` (the original 8-bit). Shared melodies (`GESTURES`) rendered through
+  per-theme voices built on a small pure-Python synth (`voice/synth.py`). Switch in
+  the menu-bar app's Settings, or `clawd config set sounds.theme music_box`. Audition
+  any: `clawd sounds preview --theme bubbly`. Plus `SPOKEN` TTS one-liners + live `say`.
 - **Vibes** — `AUTO_TIMEOUTS` / idle behavior in `divoom_pet/daemon/state_machine.py` and the idle fidget weights in `clawd.py`.
 
 ## The full CLI
@@ -120,7 +125,7 @@ clawd say "text"                       speak arbitrary text (live voice)
 clawd sessions                         list live Claude Code sessions (fleet bar)
 clawd assets [build|list]              turn assets/*.png|gif into animations
 clawd watch [--repo R] [--interval S]  react to GitHub PRs / CI (needs gh)
-clawd sounds [preview|render]          audition / rebuild the voice
+clawd sounds [preview|render|themes]   audition the voice / list sound themes
 clawd config [show | set K V]          read / change settings
 clawd doctor                           "is the crab okay??"
 clawd install-hooks                    wire into Claude Code

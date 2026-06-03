@@ -36,6 +36,7 @@ class SoundsCfg:
     enabled: bool = True
     volume: float = 0.6              # 0..1, scales synthesized chirps
     audio_device: str = "DitooPro"   # output device name substring
+    theme: str = "marimba"           # chirp theme: marimba/music_box/bubbly/chip
 
 
 @dataclass(frozen=True)

@@ -328,19 +328,29 @@ def render_say_to_wav(text: str, path: Path, voice: Optional[str] = None,
 
 
 def render_all(force: bool = False, voice: Optional[str] = None,
-               chirps_only: bool = False) -> Dict[str, Path]:
+               chirps_only: bool = False, theme: str = "chip") -> Dict[str, Path]:
     """Render every chirp variant (and spoken line if `say` exists) into SOUNDS_DIR.
 
-    Each chirp/spoken name has N variants written as ``chirp_<name>_<i>.wav`` /
-    ``say_<name>_<i>.wav``. A ``chirp_<name>`` / ``say_<name>`` alias points at
-    variant 0 for callers that want a single deterministic file (e.g. preview).
+    Chirps come from the active `theme` (see voice/themes.py); 'chip' is the legacy
+    CHIRPS. Each chirp/spoken name has N variants written as ``chirp_<name>_<i>.wav``
+    / ``say_<name>_<i>.wav``, with a ``chirp_<name>`` / ``say_<name>`` alias to
+    variant 0.
 
     `voice` overrides the TTS voice (None = auto-pick). `chirps_only` skips the
-    (slow) `say` re-render — used for live volume changes, which only affect the
-    synthesized chirps."""
+    (slow) `say` re-render — used for live volume / theme changes."""
+    from .themes import get_theme  # lazy import to avoid a module cycle
+
+    chirps = get_theme(theme)
     SOUNDS_DIR.mkdir(parents=True, exist_ok=True)
+    if force:
+        # Clear stale chirp variants (e.g. a previous theme had more) before re-render.
+        for old in SOUNDS_DIR.glob("chirp_*.wav"):
+            try:
+                old.unlink()
+            except OSError:
+                pass
     paths: Dict[str, Path] = {}
-    for name, fns in CHIRPS.items():
+    for name, fns in chirps.items():
         for i, fn in enumerate(fns):
             p = SOUNDS_DIR / f"chirp_{name}_{i}.wav"
             if force or not p.exists():
@@ -403,18 +413,19 @@ class SoundPlayer:
     def __init__(self, enabled: bool = True, min_interval: float = 0.25,
                  device: Optional[str] = None, volume: Optional[float] = None,
                  babble: bool = True, spoken_lines: bool = True,
-                 tts_voice: Optional[str] = None):
+                 tts_voice: Optional[str] = None, theme: str = "chip"):
         self.enabled = enabled and shutil.which("afplay") is not None
         self.min_interval = min_interval
         self.device = device or os.environ.get("CLAWD_AUDIO_DEVICE", "DitooPro")
         self.babble = babble
         self.spoken_lines = spoken_lines
         self.tts_voice = tts_voice
+        self.theme = theme
         if volume is not None:
             set_master_volume(volume)
         self._last = 0.0
         self._lock = threading.Lock()
-        self.paths = render_all(voice=tts_voice) if self.enabled else {}
+        self.paths = render_all(voice=tts_voice, theme=theme) if self.enabled else {}
         self._play_bin = find_play_binary()
         self._serve: Optional[subprocess.Popen] = None
         self._serve_lock = threading.Lock()
@@ -531,7 +542,20 @@ class SoundPlayer:
         """Apply a new loudness and re-render the chirps (fast; skips TTS)."""
         set_master_volume(v)
         if self.enabled:
-            self.paths.update(render_all(force=True, voice=self.tts_voice, chirps_only=True))
+            self.paths.update(render_all(force=True, voice=self.tts_voice,
+                                         chirps_only=True, theme=self.theme))
+
+    def set_theme(self, theme: str) -> None:
+        """Switch the chirp theme and re-render the chirps (skips TTS). Drops the
+        old theme's chirp cache entries so stale variants don't linger."""
+        if theme == self.theme:
+            return
+        self.theme = theme
+        if not self.enabled:
+            return
+        self.paths = {k: v for k, v in self.paths.items() if not k.startswith("chirp_")}
+        self.paths.update(render_all(force=True, voice=self.tts_voice,
+                                     chirps_only=True, theme=theme))
 
     def set_tts_voice(self, voice: Optional[str]) -> None:
         """Switch the spoken-line voice and re-render the `say` lines."""

@@ -107,6 +107,15 @@ Rides entirely on Phase 1.
 - **Hands-free:** launchd watcher template + git hooks; the menu-bar app already
   owns login autostart.
 
+### Sound themes — ✅ **done**
+- Switchable voice themes (`voice/themes.py`) on a richer pure-Python synth
+  (`voice/synth.py`: additive harmonics, FM, pitch glide, lowpass, echo): `marimba`
+  (default), `music_box`, `bubbly`, + legacy `chip`. Shared `GESTURES` rendered
+  through per-theme voices. `sounds.theme` config, live switch via `set_theme`,
+  `clawd sounds themes` / `preview --theme`, and a Settings picker in the app.
+- *Follow-up:* drop-in **sample-pack** themes (`~/.clawd/themes/<name>/*.wav`) so
+  users can add real designed sounds.
+
 ### Coding scenes — ✅ **done**
 - Hand-authored crab-with-laptop animations (`sprites/coding.py`): `laptop` (typing
   code), `terminal` (cursor), `compile` (Anthropic asterisk). A looping `coding`

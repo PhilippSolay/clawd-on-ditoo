@@ -293,38 +293,58 @@ def cmd_watch(args) -> int:
     return 0
 
 
+def _active_theme() -> str:
+    """The configured theme (live daemon if up, else the config file)."""
+    out = _get(f"{DEFAULT_URL}/config")
+    if out:
+        return (out.get("sounds") or {}).get("theme", "marimba")
+    from divoom_pet.config import Config
+    return Config.load().sounds.theme
+
+
 def cmd_sounds(args) -> int:
     import subprocess
+    import tempfile
     import time as _t
-    from divoom_pet.voice import sounds as snd
+    from pathlib import Path as _Path
+    from divoom_pet.voice import sounds as snd, themes
 
-    if args.action == "render":
-        paths = snd.render_all(force=True)
-        print(f"rendered {len(paths)} sounds into {snd.SOUNDS_DIR}")
+    if args.action == "themes":
+        active = _active_theme()
+        print("sound themes:")
+        for name in themes.BUILTIN_THEMES:
+            mark = " (active)" if name == active else ""
+            print(f"  {name}{mark}")
+        print("\n  preview:  clawd sounds preview --theme music_box")
+        print("  switch:   clawd config set sounds.theme music_box")
         return 0
 
-    # preview
-    paths = snd.render_all()
+    theme = args.theme or _active_theme()
+
+    if args.action == "render":
+        paths = snd.render_all(force=True, theme=theme)
+        print(f"rendered {len(paths)} sounds ({theme}) into {snd.SOUNDS_DIR}")
+        return 0
+
+    # preview — render this theme's chirps to a temp dir (don't clobber the live cache)
     if not __import__("shutil").which("afplay"):
         print("afplay not available")
         return 2
-    print(f"Previewing Clawd's voice (output device = whatever your system default is).")
+    chirps = themes.get_theme(theme)
+    print(f"Previewing the '{theme}' theme (plays on your system default output).")
     print("Set System Settings -> Sound -> Output -> Divoom Ditoo to hear it on the speaker.\n")
     order = ["wake", "think", "tool", "done", "error", "sleep", "poke"]
-    for name in order:
-        p = paths.get(f"chirp_{name}")
-        if p:
-            print(f"  chirp: {name}")
+    with tempfile.TemporaryDirectory() as d:
+        for name in order:
+            fns = chirps.get(name)
+            if not fns:
+                continue
+            p = _Path(d) / f"{name}.wav"
+            snd.write_wav(p, fns[0]())
+            print(f"  {name}")
             subprocess.run(["afplay", str(p)])
-            _t.sleep(0.25)
-    print("\n  spoken lines:")
-    for name in ["hatch", "done", "error", "poke"]:
-        p = paths.get(f"say_{name}")
-        if p:
-            print(f"  say: {name}")
-            subprocess.run(["afplay", str(p)])
-            _t.sleep(0.25)
-    print("\n  That's Clawd's voice. Tweak it in divoom_pet/voice/sounds.py (CHIRPS / SPOKEN).")
+            _t.sleep(0.2)
+    print(f"\n  That's the '{theme}' theme. Try others: clawd sounds themes")
     return 0
 
 
@@ -555,8 +575,10 @@ def main(argv=None) -> int:
     p_watch.add_argument("--once", action="store_true", help="poll once and exit (seeds baseline)")
     p_watch.set_defaults(func=cmd_watch)
 
-    p_sounds = sub.add_parser("sounds", help="Preview or re-render Clawd's voice")
-    p_sounds.add_argument("action", nargs="?", default="preview", choices=["preview", "render"])
+    p_sounds = sub.add_parser("sounds", help="Preview/render Clawd's voice, or list themes")
+    p_sounds.add_argument("action", nargs="?", default="preview",
+                          choices=["preview", "render", "themes"])
+    p_sounds.add_argument("--theme", help="theme to preview/render (default: active)")
     p_sounds.set_defaults(func=cmd_sounds)
 
     p_doctor = sub.add_parser("doctor", help="Diagnose setup")
