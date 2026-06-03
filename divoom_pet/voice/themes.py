@@ -75,8 +75,8 @@ THEME_BUILDERS: Dict[str, Callable[[], Dict[str, List[Callable]]]] = {
 }
 
 # Display order for menus / CLI. "chip" is the legacy CHIRPS in sounds.py.
-BUILTIN_THEMES: List[str] = ["marimba", "music_box", "bubbly", "chip"]
-DEFAULT_THEME = "marimba"
+BUILTIN_THEMES: List[str] = ["bubbly", "marimba", "music_box", "chip"]
+DEFAULT_THEME = "bubbly"
 
 
 def get_theme(name: str) -> Dict[str, List[Callable]]:

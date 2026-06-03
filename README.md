@@ -104,8 +104,8 @@ A few settings (`device.mac`, `device.channel`, `sounds.audio_device`) need a re
 ## Make him yours
 
 - **Sprites** — `divoom_pet/sprites/clawd.py` (16-row strings, one char per pixel). Regenerate the gallery: `python3 -m divoom_pet.sprites.clawd previews/`.
-- **Voice** — switchable **sound themes** in `divoom_pet/voice/themes.py`: `marimba`
-  (warm mallet, default), `music_box` (bell + echo), `bubbly` (pitch-glide bloops),
+- **Voice** — switchable **sound themes** in `divoom_pet/voice/themes.py`: `bubbly`
+  (pitch-glide bloops, default), `marimba` (warm mallet), `music_box` (bell + echo),
   and `chip` (the original 8-bit). Shared melodies (`GESTURES`) rendered through
   per-theme voices built on a small pure-Python synth (`voice/synth.py`). Switch in
   the menu-bar app's Settings, or `clawd config set sounds.theme music_box`. Audition

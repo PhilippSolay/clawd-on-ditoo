@@ -297,7 +297,7 @@ def _active_theme() -> str:
     """The configured theme (live daemon if up, else the config file)."""
     out = _get(f"{DEFAULT_URL}/config")
     if out:
-        return (out.get("sounds") or {}).get("theme", "marimba")
+        return (out.get("sounds") or {}).get("theme", "bubbly")
     from divoom_pet.config import Config
     return Config.load().sounds.theme
 
