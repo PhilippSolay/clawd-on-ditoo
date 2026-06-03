@@ -5,8 +5,10 @@ import unittest
 from divoom_pet.render.canvas import BLACK, PIXELS, WIDTH
 from divoom_pet.render.colors import COLORS
 from divoom_pet.render.compositor import (
+    SESSION_COLORS,
     CountBadge,
     ProgressBar,
+    SessionBar,
     banner,
     compose,
     compose_animation,
@@ -102,6 +104,26 @@ class BannerTests(unittest.TestCase):
     def test_empty_text_still_yields_a_frame(self):
         frames = banner("", color=GREEN)
         self.assertTrue(len(frames) >= 1)
+
+
+class SessionBarTests(unittest.TestCase):
+    def test_one_dot_per_session_in_bottom_row(self):
+        frame = compose(None, [SessionBar(states=("running", "finished", "needs_input"))])
+        bottom = frame[15 * WIDTH:16 * WIDTH]
+        self.assertEqual(bottom[0], SESSION_COLORS["running"])    # pitch 2 → x=0,2,4
+        self.assertEqual(bottom[1], BLACK)
+        self.assertEqual(bottom[2], SESSION_COLORS["finished"])
+        self.assertEqual(bottom[4], SESSION_COLORS["needs_input"])
+
+    def test_empty_draws_nothing(self):
+        self.assertEqual(compose(None, [SessionBar(states=())]), [BLACK] * PIXELS)
+
+    def test_crowded_fleet_packs_to_1px(self):
+        frame = compose(None, [SessionBar(states=tuple(["running"] * 12))])
+        bottom = frame[15 * WIDTH:16 * WIDTH]
+        # 12 × pitch 2 = 24 > 16, so pitch collapses to 1 → 12 contiguous dots
+        self.assertTrue(all(px == SESSION_COLORS["running"] for px in bottom[:12]))
+        self.assertEqual(bottom[12], BLACK)
 
 
 class ComposeAnimationTests(unittest.TestCase):

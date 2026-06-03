@@ -8,7 +8,19 @@ imported on demand for offline previews, never by the daemon).
 
 from .canvas import BLACK, HEIGHT, PIXELS, RGB, WIDTH, Canvas
 from .colors import COLORS, parse_color
-from .compositor import CountBadge, Overlay, ProgressBar, banner, compose
+from .compositor import (
+    SESSION_COLORS,
+    SESSION_FINISHED,
+    SESSION_IDLE,
+    SESSION_NEEDS_INPUT,
+    SESSION_RUNNING,
+    CountBadge,
+    Overlay,
+    ProgressBar,
+    SessionBar,
+    banner,
+    compose,
+)
 from .font import draw_text, text_width
 
 __all__ = [
@@ -26,5 +38,11 @@ __all__ = [
     "Overlay",
     "ProgressBar",
     "CountBadge",
+    "SessionBar",
+    "SESSION_COLORS",
+    "SESSION_RUNNING",
+    "SESSION_FINISHED",
+    "SESSION_NEEDS_INPUT",
+    "SESSION_IDLE",
     "banner",
 ]

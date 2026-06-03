@@ -259,6 +259,30 @@ def cmd_say(args) -> int:
     return 0
 
 
+def cmd_session(args) -> int:
+    """Report a session's state to the fleet bar (running/finished/needs_input/idle)."""
+    out = _post(f"{DEFAULT_URL}/session", {"session_id": args.id, "status": args.status})
+    if not out:
+        return 2
+    print(json.dumps(out))
+    return 0
+
+
+def cmd_sessions(args) -> int:
+    """List the live sessions currently on the fleet bar."""
+    out = _get(f"{DEFAULT_URL}/sessions")
+    if out is None:
+        print("daemon not responding", file=sys.stderr)
+        return 2
+    sessions = out.get("sessions", [])
+    if not sessions:
+        print("no active sessions")
+        return 0
+    for s in sessions:
+        print(f"  {s.get('state', '?'):12} {s.get('id', '')}")
+    return 0
+
+
 def cmd_watch(args) -> int:
     """Run the GitHub PR/CI watcher, feeding transitions to Clawd's event surface."""
     from divoom_pet import watch as watcher
@@ -511,6 +535,14 @@ def main(argv=None) -> int:
     p_say = sub.add_parser("say", help="Speak arbitrary text through Clawd (live voice)")
     p_say.add_argument("text", help="what Clawd should say")
     p_say.set_defaults(func=cmd_say)
+
+    p_session = sub.add_parser("session", help="Report a session's state to the fleet bar")
+    p_session.add_argument("id", help="session id")
+    p_session.add_argument("status", choices=["running", "finished", "needs_input", "idle"])
+    p_session.set_defaults(func=cmd_session)
+
+    p_sessions = sub.add_parser("sessions", help="List live sessions on the fleet bar")
+    p_sessions.set_defaults(func=cmd_sessions)
 
     p_assets = sub.add_parser("assets", help="Build drop-in PNG/GIF assets, or list them")
     p_assets.add_argument("action", nargs="?", default="list", choices=["build", "list"])

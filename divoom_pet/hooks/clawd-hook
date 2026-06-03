@@ -34,13 +34,19 @@ post_state() {
     local state="$1"
     local note="${2:-}"
     local body
-    if [ -n "$note" ]; then
-        # naive but safe-enough escaping: strip quotes and limit length
-        note_safe=$(printf '%s' "$note" | tr -d '"\\' | cut -c1-40)
-        body=$(printf '{"state":"%s","note":"%s"}' "$state" "$note_safe")
-    else
-        body=$(printf '{"state":"%s"}' "$state")
-    fi
+    # Build the JSON body in python so quotes/unicode are escaped safely, and so we
+    # can attach this session's id (set below) for the multi-session fleet bar.
+    body=$(STATE="$state" NOTE="$note" SID="${session_id:-}" python3 -c '
+import json, os
+b = {"state": os.environ["STATE"]}
+note = os.environ.get("NOTE", "")
+if note:
+    b["note"] = note[:40]
+sid = os.environ.get("SID", "")
+if sid:
+    b["session_id"] = sid
+print(json.dumps(b))' 2>/dev/null)
+    [ -z "$body" ] && body=$(printf '{"state":"%s"}' "$state")
     curl -s --max-time "$TIMEOUT" -XPOST -H 'Content-Type: application/json' \
         -d "$body" "$DAEMON_URL/state" >/dev/null 2>&1 || true
 }
@@ -90,9 +96,12 @@ except Exception:
 " 2>/dev/null
 }
 
+# This session's id rides along on every /state post (drives the fleet bar).
+session_id=$(json_field session_id)
+
 case "$action" in
     prompt)
-        post_state thinking "$(json_field session_id)"
+        post_state thinking
         ;;
     pre-tool)
         tool=$(json_field tool_name)

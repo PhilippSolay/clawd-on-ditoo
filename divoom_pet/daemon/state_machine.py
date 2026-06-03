@@ -153,6 +153,11 @@ class PetController:
                 self._overlays = {k: v for k, v in self._overlays.items() if k != key}
         self._state_changed.set()
 
+    def get_overlay(self, key: str) -> Optional[object]:
+        """Return the overlay registered under `key`, or None."""
+        with self._lock:
+            return self._overlays.get(key)
+
     def play_takeover(self, frames: List) -> None:
         """Queue a one-shot animation — a list of (frame, duration_ms) pairs — to
         play as soon as possible, after which the current mood resumes."""

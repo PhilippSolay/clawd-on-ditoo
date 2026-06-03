@@ -107,10 +107,17 @@ Rides entirely on Phase 1.
 - **Hands-free:** launchd watcher template + git hooks; the menu-bar app already
   owns login autostart.
 
+### Multi-session fleet bar — ✅ **done**
+- One daemon serves all sessions, so a bottom strip of dots shows each session's
+  state (running / needs-input / finished / idle), keyed by `session_id` with TTL
+  expiry. `daemon/sessions.py` registry + `SessionBar` overlay; hooks carry the
+  id; `/session` + `/sessions` endpoints; `clawd session|sessions` CLI.
+
 ### Still open
 - Native `push_animation` device-side upload for ambient asset loops.
 - Number-word voice for arbitrary agent counts (>5) without a cold `say`.
 - "Active repo" auto-detection for `clawd watch` (today it follows a fixed repo).
+- Per-session blink for "needs input" (needs the render loop to tick faster).
 
 ---
 

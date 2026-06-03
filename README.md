@@ -117,6 +117,7 @@ clawd poke / chirp / demo              mess with him
 clawd notify progress|badge|banner     push live content (see below)
 clawd notify play|effect <name>        play a drop-in asset / procedural effect
 clawd say "text"                       speak arbitrary text (live voice)
+clawd sessions                         list live Claude Code sessions (fleet bar)
 clawd assets [build|list]              turn assets/*.png|gif into animations
 clawd watch [--repo R] [--interval S]  react to GitHub PRs / CI (needs gh)
 clawd sounds [preview|render]          audition / rebuild the voice
@@ -149,6 +150,10 @@ Wired into Claude Code (via `install-hooks`) he does this automatically:
 - **`clawd watch`** polls a repo with `gh`: a **new PR**, **CI red/green**, or a
   **merge** triggers a banner (+ mood + voice). Run it inside your repo, or point
   it anywhere with `--repo owner/name`.
+- **Session fleet bar** — one pet daemon serves *all* your Claude Code sessions, so
+  a strip of dots along the bottom shows each one's state at a glance: 🟠 running,
+  🔴 needs-input, 🟢 finished (dropping off as they go idle). It lights up
+  automatically once hooks are installed; inspect it with `clawd sessions`.
 
 ### Animations: procedural *and* drop-in
 
