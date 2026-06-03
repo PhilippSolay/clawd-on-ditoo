@@ -112,8 +112,9 @@ Rides entirely on Phase 1.
   code), `terminal` (cursor), `compile` (Anthropic asterisk). A looping `coding`
   State (defaults to the compile scene) + on-demand `clawd notify play <scene>`.
 - Hooks wire it "auto but keep the gear": prompt/post-tool → `coding`,
-  pre-tool stays `tool_use`. So Clawd sits at his laptop while you work, and shows
-  the gear during actual tool calls.
+  pre-tool → `tool_use`. To avoid a jarring pose flip per tool call, `tool_use`
+  now renders the **same laptop body** with a gear pulsing on the screen — so
+  coding↔tool only swaps the screen icon, not the whole crab.
 
 ### Multi-session fleet bar — ✅ **done**
 - One daemon serves all sessions, so a bottom strip of dots shows each session's

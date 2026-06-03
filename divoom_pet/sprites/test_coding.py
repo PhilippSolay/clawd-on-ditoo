@@ -28,7 +28,16 @@ class SceneTests(unittest.TestCase):
                 self.assertGreater(ms, 0)
 
     def test_known_scene_names(self):
-        self.assertEqual(set(SCENES), {"laptop", "terminal", "compile"})
+        self.assertEqual(set(SCENES), {"laptop", "terminal", "compile", "tooling"})
+
+    def test_tool_scene_shares_laptop_body_with_compile(self):
+        # Rows 0-4 and 9-12 must match the compile scene exactly so coding<->tool
+        # only changes the screen icon (no jarring pose jump).
+        from divoom_pet.sprites.coding import CODING_SPRITES
+        compile_rows = CODING_SPRITES["compile_a"].rows
+        tool_rows = CODING_SPRITES["laptop_tool_a"].rows
+        for i in list(range(0, 5)) + list(range(9, 13)):
+            self.assertEqual(tool_rows[i], compile_rows[i], f"row {i} differs")
 
     def test_coding_state_returns_default_scene(self):
         from divoom_pet.sprites.coding import DEFAULT_CODING_SCENE

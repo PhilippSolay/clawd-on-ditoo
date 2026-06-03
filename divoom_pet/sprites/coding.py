@@ -146,9 +146,55 @@ COMPILE_B = _canvas([
 ])
 
 
+# ---------- tool call: a gear pulses on the SAME laptop body ----------
+# Shares rows 0-4 and 9-12 with the compile scene exactly, so switching between
+# "thinking" (coding) and "tool call" only changes the screen icon — the crab and
+# laptop never move, which kills the jarring full-screen flip.
+
+LAPTOP_TOOL_A = _canvas([
+    "....k......k....",
+    "....o......o....",
+    "...oo......oo...",
+    "..LLLLLLLLLLLL..",
+    "..LSSSSSSSSSSL..",
+    "..LS..aaaa..SL..",   # gear / cog (hollow)
+    "..LS..a..a..SL..",
+    "..LS..aaaa..SL..",
+    "..LSSSSSSSSSSL..",
+    "..LLLLLLLLLLLL..",
+    ".GGGGGGGGGGGGGG.",
+    "ooGGGGGGGGGGGGoo",
+    ".oGGGGGGGGGGGGo.",
+    "................",
+    "................",
+    "................",
+])
+
+LAPTOP_TOOL_B = _canvas([
+    "....k......k....",
+    "....o......o....",
+    "...oo......oo...",
+    "..LLLLLLLLLLLL..",
+    "..LSSSSSSSSSSL..",
+    "..LS..aaaa..SL..",   # gear "ticks" (fills solid) — a working pulse
+    "..LS..aaaa..SL..",
+    "..LS..aaaa..SL..",
+    "..LSSSSSSSSSSL..",
+    "..LLLLLLLLLLLL..",
+    ".GGGGGGGGGGGGGG.",
+    "ooGGGGGGGGGGGGoo",
+    ".oGGGGGGGGGGGGo.",
+    "................",
+    "................",
+    "................",
+])
+
+
 # ---------- registry ----------
 
 CODING_SPRITES: Dict[str, Sprite] = {
+    "laptop_tool_a": Sprite("laptop_tool_a", LAPTOP_TOOL_A),
+    "laptop_tool_b": Sprite("laptop_tool_b", LAPTOP_TOOL_B),
     "laptop_a": Sprite("laptop_a", LAPTOP_A),
     "laptop_b": Sprite("laptop_b", LAPTOP_B),
     "term_a": Sprite("term_a", TERM_A),
@@ -162,6 +208,8 @@ SCENES: Dict[str, List[Tuple[Sprite, int]]] = {
     "laptop": [(CODING_SPRITES["laptop_a"], 240), (CODING_SPRITES["laptop_b"], 240)],
     "terminal": [(CODING_SPRITES["term_a"], 520), (CODING_SPRITES["term_b"], 520)],
     "compile": [(CODING_SPRITES["compile_a"], 300), (CODING_SPRITES["compile_b"], 300)],
+    # Tool call: same laptop body as `compile`, gear pulsing on screen.
+    "tooling": [(CODING_SPRITES["laptop_tool_a"], 280), (CODING_SPRITES["laptop_tool_b"], 280)],
 }
 
 # Which scene the looping `coding` state shows.

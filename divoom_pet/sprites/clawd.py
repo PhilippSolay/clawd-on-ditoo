@@ -718,10 +718,9 @@ def animation_for_state(state: State, idle: IdleOpts = DEFAULT_IDLE) -> List[Tup
             (SPRITES["typing_down"], 160),
         ]
     if state == State.TOOL_USE:
-        return [
-            (SPRITES["tool_use"], 320),
-            (SPRITES["idle_open"], 220),
-        ]
+        # Stay on the laptop (gear on screen) so coding<->tool doesn't jump poses.
+        from divoom_pet.sprites.coding import SCENES
+        return SCENES["tooling"]
     if state == State.HAPPY:
         return [
             (SPRITES["happy_a"], 380),
