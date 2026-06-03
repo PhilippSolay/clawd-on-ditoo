@@ -24,6 +24,7 @@ import shutil
 import signal
 import sys
 import threading
+import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import List, Optional
@@ -31,6 +32,7 @@ from typing import List, Optional
 from divoom_pet.config import CONFIG_PATH, Config
 from divoom_pet.render import COLORS, CountBadge, ProgressBar, banner, parse_color
 from divoom_pet.render.assets import AssetLibrary
+from divoom_pet.render.clock import clock_takeover
 from divoom_pet.render.effects import EFFECTS
 from divoom_pet.sprites import IdleOpts, State
 
@@ -163,6 +165,7 @@ class PetHandler(BaseHTTPRequestHandler):
               "mood":"happy","speak":"done"}                     (+ optional mood/voice)
           {"kind":"play","name":"confetti_gif","mood":"happy"}   a built asset by name
           {"kind":"effect","name":"confetti"}                    a procedural effect
+          {"kind":"clock","color":"cyan"}                        show the time (HH over MM)
           {"kind":"agent_done"}                                  tick the agent tally
           {"kind":"agents_reset"}                                zero the tally + badge
           {"kind":"clear","name":"progress"}                     clear one / all
@@ -223,6 +226,13 @@ class PetHandler(BaseHTTPRequestHandler):
             c.play_takeover(generator())
             self._mood_and_speak(body)
             return self._reply(200, {"ok": True, "kind": "effect", "name": name})
+
+        if kind == "clock":
+            color = parse_color(body.get("color"), COLORS["cyan"])
+            now = time.localtime()
+            c.play_takeover(clock_takeover(now.tm_hour, now.tm_min, color=color))
+            return self._reply(200, {"ok": True, "kind": "clock",
+                                     "time": f"{now.tm_hour:02d}:{now.tm_min:02d}"})
 
         if kind == "agent_done":
             count = c.agent_came_home()

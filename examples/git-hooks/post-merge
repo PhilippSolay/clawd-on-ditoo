@@ -1,0 +1,7 @@
+#!/bin/bash
+# Clawd celebrates a merge (e.g. after `git pull` fast-forwards or you merge a branch).
+#   cp examples/git-hooks/post-merge .git/hooks/ && chmod +x .git/hooks/post-merge
+CLAWD="${CLAWD_BIN:-$HOME/code/divoom-pet/bin/clawd}"
+"$CLAWD" notify effect confetti >/dev/null 2>&1 || true
+"$CLAWD" notify banner "MERGED" --mood happy --say "Merged!" >/dev/null 2>&1 || true
+exit 0

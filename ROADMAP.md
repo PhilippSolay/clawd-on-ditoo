@@ -96,10 +96,21 @@ Rides entirely on Phase 1.
 
 ---
 
-## All four phases shipped. Possible follow-ups
+## All four phases shipped — verified on real hardware.
+
+### Follow-up round (polish · signals · content · hands-free) — ✅ **done**
+- **Polish:** overlays/banner are tunable per-call; on-device comparison confirmed
+  the defaults (1px bar, dark-backed badge).
+- **More content:** `effects.py` gained starfield / matrix rain / spinner / rainbow.
+- **More signals:** a procedural stacked HH:MM clock (`render/clock.py`, `notify
+  clock`); git-hook + test-result + launchd recipes in [`examples/`](examples/).
+- **Hands-free:** launchd watcher template + git hooks; the menu-bar app already
+  owns login autostart.
+
+### Still open
 - Native `push_animation` device-side upload for ambient asset loops.
-- Number-word composition for arbitrary agent counts (>5) without a cold `say`.
-- A retune pass on overlay colors/sizes once seen on real hardware.
+- Number-word voice for arbitrary agent counts (>5) without a cold `say`.
+- "Active repo" auto-detection for `clawd watch` (today it follows a fixed repo).
 
 ---
 

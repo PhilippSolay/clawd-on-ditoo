@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  Keep `clawd watch` running for a repo, hands-free, across logins.
+
+  1. Edit USERNAME and OWNER/REPO below (and the path if your checkout differs).
+  2. cp examples/launchd/com.clawd.watch.plist ~/Library/LaunchAgents/
+  3. launchctl load ~/Library/LaunchAgents/com.clawd.watch.plist
+     (to stop: launchctl unload ~/Library/LaunchAgents/com.clawd.watch.plist)
+
+  Needs the pet daemon already running (the menu-bar app's "Launch at Login"
+  handles that) and `gh` authenticated. Logs to /tmp/clawd-watch.log.
+-->
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.clawd.watch</string>
+    <key>ProgramArguments</key>
+    <array>
+        <string>/Users/USERNAME/code/divoom-pet/bin/clawd</string>
+        <string>watch</string>
+        <string>--repo</string>
+        <string>OWNER/REPO</string>
+        <string>--interval</string>
+        <string>60</string>
+    </array>
+    <key>RunAtLoad</key>
+    <true/>
+    <key>KeepAlive</key>
+    <true/>
+    <key>StandardOutPath</key>
+    <string>/tmp/clawd-watch.log</string>
+    <key>StandardErrorPath</key>
+    <string>/tmp/clawd-watch.log</string>
+</dict>
+</plist>

@@ -155,8 +155,10 @@ Wired into Claude Code (via `install-hooks`) he does this automatically:
 Two ways to give Clawd new moves:
 
 ```bash
-clawd notify effect confetti     # procedural: confetti / fireworks / plasma / pulse
-                                 #   — "live-created" from math, no art files
+clawd notify effect confetti     # procedural, "live-created" from math, no art files:
+                                 #   confetti fireworks plasma pulse
+                                 #   starfield matrix spinner rainbow
+clawd notify clock               # show the time (HH stacked over MM)
 
 cp my_cute_loop.gif assets/      # drop-in: any PNG/GIF
 clawd assets build               # → downscaled to 16×16, palette-snapped, named
@@ -180,6 +182,12 @@ done"…) is pre-rendered shortly after startup, so those speak instantly (~650 
 Anything novel renders once via `say` (~1.7 s) and is cached, so it's warm next
 time. `clawd watch` uses these phrases, so a merge actually *says* "Pull request
 merged!" while the banner scrolls.
+
+### Hands-free
+
+Let Clawd run himself — git-hook recipes (react to commits/merges), an always-on
+launchd PR watcher, and a test-result wrapper all live in [`examples/`](examples/).
+Copy, tweak the paths, done.
 
 ## Under the shell
 

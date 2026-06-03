@@ -207,6 +207,9 @@ def cmd_notify(args) -> int:
             val = getattr(args, flag)
             if val:
                 body[flag] = val
+    elif kind == "clock":
+        if args.color:
+            body["color"] = args.color
     elif kind == "clear":
         if args.value:
             body["name"] = args.value
@@ -493,7 +496,8 @@ def main(argv=None) -> int:
     p_chirp.set_defaults(func=cmd_chirp)
 
     p_notify = sub.add_parser("notify", help="Push live content (progress bar / badge / banner)")
-    p_notify.add_argument("kind", choices=["progress", "badge", "banner", "play", "effect", "clear"])
+    p_notify.add_argument("kind",
+                          choices=["progress", "badge", "banner", "play", "effect", "clock", "clear"])
     p_notify.add_argument("value", nargs="?",
                           help="progress 0..1 / badge count / banner text / asset|effect name / overlay to clear")
     p_notify.add_argument("--clear", action="store_true", help="clear this overlay (progress/badge)")
