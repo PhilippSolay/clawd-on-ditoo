@@ -13,9 +13,10 @@ import logging
 import threading
 import time
 from dataclasses import dataclass, field
-from typing import Callable, Optional
+from typing import Callable, Dict, List, Optional
 
-from divoom_pet.sprites import DEFAULT_IDLE, IdleOpts, State, animation_for_state, sprite_to_rgb_frame
+from divoom_pet.render import COLORS, CountBadge, compose
+from divoom_pet.sprites import DEFAULT_IDLE, IdleOpts, State, animation_for_state
 from divoom_pet.voice.sounds import STATE_CHIRP, STATE_SPEAK, SoundPlayer
 
 from .bridge import DitooBridge
@@ -49,6 +50,12 @@ class PetController:
     _state: State = State.IDLE
     _state_started_at: float = field(default_factory=time.time)
     _last_activity_at: float = field(default_factory=time.time)
+    # Persistent data overlays (progress bar, count badge…), keyed by name and
+    # swapped immutably. A one-shot `_takeover` animation, when queued, plays
+    # before the mood loop resumes.
+    _overlays: Dict[str, object] = field(default_factory=dict)
+    _takeover: Optional[List] = None
+    _agents_home: int = 0  # running tally of finished subagents this session
     _stop: threading.Event = field(default_factory=threading.Event)
     _state_changed: threading.Event = field(default_factory=threading.Event)
     _lock: threading.Lock = field(default_factory=threading.Lock)
@@ -127,32 +134,108 @@ class PetController:
         else:
             self.set_state(State.SLEEPING, note="double-clap sleep")
 
+    # ---------- live content (overlays + takeovers) ----------
+
+    def set_overlay(self, key: str, overlay: object) -> None:
+        """Add or replace a named persistent overlay (e.g. a progress bar). The
+        overlay must have a `draw(canvas)` method. Immutable swap — we build a new
+        dict so the render loop never sees a half-mutated structure."""
+        with self._lock:
+            self._overlays = {**self._overlays, key: overlay}
+        self._state_changed.set()  # nudge the loop to repaint promptly
+
+    def clear_overlay(self, key: Optional[str] = None) -> None:
+        """Remove one overlay by key, or all overlays when key is None."""
+        with self._lock:
+            if key is None:
+                self._overlays = {}
+            else:
+                self._overlays = {k: v for k, v in self._overlays.items() if k != key}
+        self._state_changed.set()
+
+    def play_takeover(self, frames: List) -> None:
+        """Queue a one-shot animation — a list of (frame, duration_ms) pairs — to
+        play as soon as possible, after which the current mood resumes."""
+        if not frames:
+            return
+        with self._lock:
+            self._takeover = list(frames)
+        self._state_changed.set()
+
+    def _pop_takeover(self) -> Optional[List]:
+        with self._lock:
+            pending = self._takeover
+            self._takeover = None
+            return pending
+
+    def agent_came_home(self) -> int:
+        """A subagent finished: tick the tally, show it as a corner badge, and play
+        the delight (poke) reaction. Returns the new count."""
+        with self._lock:
+            self._agents_home += 1
+            count = self._agents_home
+        self.set_overlay("badge", CountBadge(count=count, corner="tr", color=COLORS["yellow"]))
+        self.set_state(State.POKE, note="agent home")
+        return count
+
+    def reset_agents(self) -> None:
+        """New session / done: zero the tally and drop the badge."""
+        with self._lock:
+            self._agents_home = 0
+        self.clear_overlay("badge")
+
     # ---------- internal loop ----------
 
     def _run(self) -> None:
         while not self._stop.is_set():
+            # A queued one-shot takeover (e.g. a "MERGED" banner) wins this cycle.
+            takeover = self._pop_takeover()
+            if takeover is not None:
+                self._play_frames(takeover)
+                continue
+
             with self._lock:
                 current = self._state
                 idle_opts = self.idle_opts
             anim = animation_for_state(current, idle_opts)
-            # Render the animation once. After it loops we re-check state.
+            # Render the animation once, compositing live overlays per frame. After
+            # it loops (uninterrupted) we re-check auto-transitions.
+            interrupted = False
             for sprite, duration_ms in anim:
                 if self._stop.is_set():
                     return
+                with self._lock:
+                    overlays = list(self._overlays.values())
+                frame = compose(sprite, overlays)
                 # Only push when connected; ensure_alive() reconnects (throttled)
                 # without spamming, so a dropped link recovers on its own.
                 if self.bridge.ensure_alive():
                     try:
-                        self.bridge.push_image(sprite_to_rgb_frame(sprite))
+                        self.bridge.push_image(frame)
                     except Exception as e:
                         log.debug("push_image failed: %s", e)
-                # Wait the duration, but break early if state changed.
+                # Wait the duration, but break early if state/overlay/takeover changed.
                 if self._state_changed.wait(timeout=max(0.04, duration_ms / 1000.0)):
                     self._state_changed.clear()
+                    interrupted = True
                     break
-            else:
-                # Animation completed without interruption; check auto-transitions.
+            if not interrupted:
                 self._maybe_auto_transition()
+
+    def _play_frames(self, frames: List) -> None:
+        """Push a raw (frame, duration_ms) animation once, interruptible by any
+        state/overlay/takeover change. Used for one-shot takeovers."""
+        for frame, duration_ms in frames:
+            if self._stop.is_set():
+                return
+            if self.bridge.ensure_alive():
+                try:
+                    self.bridge.push_image(frame)
+                except Exception as e:
+                    log.debug("push_image failed: %s", e)
+            if self._state_changed.wait(timeout=max(0.04, duration_ms / 1000.0)):
+                self._state_changed.clear()
+                return  # interrupted — abandon the rest of this takeover
 
     def _maybe_auto_transition(self) -> None:
         with self._lock:

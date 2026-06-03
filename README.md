@@ -114,6 +114,11 @@ clawd start [--mac MAC] [--simulate] [--no-sound] [--no-ears] [--foreground] [-v
 clawd stop
 clawd state [--set STATE]              poke the state machine directly
 clawd poke / chirp / demo              mess with him
+clawd notify progress|badge|banner     push live content (see below)
+clawd notify play|effect <name>        play a drop-in asset / procedural effect
+clawd say "text"                       speak arbitrary text (live voice)
+clawd assets [build|list]              turn assets/*.png|gif into animations
+clawd watch [--repo R] [--interval S]  react to GitHub PRs / CI (needs gh)
 clawd sounds [preview|render]          audition / rebuild the voice
 clawd config [show | set K V]          read / change settings
 clawd doctor                           "is the crab okay??"
@@ -121,6 +126,60 @@ clawd install-hooks                    wire into Claude Code
 ```
 
 States: `idle thinking typing tool_use happy alert sleeping hatch poke`.
+
+## Live content: Clawd shows you what's happening 📊
+
+On top of his moods, Clawd can overlay **data** — a progress bar, a counter, a
+big-moment banner — flattened onto the same 16×16 by a little compositor. Anything
+can drive it through one generic surface (`POST /event` / the `clawd notify` CLI),
+so it's not just Claude Code:
+
+```bash
+clawd notify progress 0.6              # a bar fills under him (0..1)
+clawd notify badge 3 --color amber     # a count in the corner
+clawd notify banner "MERGED" --mood happy --speak done   # a scrolling takeover
+clawd notify progress --clear          # take the bar away
+```
+
+Wired into Claude Code (via `install-hooks`) he does this automatically:
+
+- **TodoWrite → a real progress bar** (completed / total todos).
+- **Subagent finishes → an "agents home" tally badge** + a delighted poke;
+  `SessionStart` zeroes it.
+- **`clawd watch`** polls a repo with `gh`: a **new PR**, **CI red/green**, or a
+  **merge** triggers a banner (+ mood + voice). Run it inside your repo, or point
+  it anywhere with `--repo owner/name`.
+
+### Animations: procedural *and* drop-in
+
+Two ways to give Clawd new moves:
+
+```bash
+clawd notify effect confetti     # procedural: confetti / fireworks / plasma / pulse
+                                 #   — "live-created" from math, no art files
+
+cp my_cute_loop.gif assets/      # drop-in: any PNG/GIF
+clawd assets build               # → downscaled to 16×16, palette-snapped, named
+clawd notify play my_cute_loop   # → Clawd plays it
+```
+
+Built assets are cached as plain JSON in `~/.clawd/assets/` (so the daemon loads
+them with stdlib only — Pillow is needed just at `build` time, like the sounds).
+
+### Live voice
+
+Beyond his canned chirps, Clawd can speak *anything*:
+
+```bash
+clawd say "Pull request merged!"
+clawd notify banner "MERGED" --mood happy --say "Pull request merged!"
+```
+
+A **warm vocabulary** of common announcements (PR merged, CI status, "N agents
+done"…) is pre-rendered shortly after startup, so those speak instantly (~650 ms).
+Anything novel renders once via `say` (~1.7 s) and is cached, so it's warm next
+time. `clawd watch` uses these phrases, so a merge actually *says* "Pull request
+merged!" while the banner scrolls.
 
 ## Under the shell
 
