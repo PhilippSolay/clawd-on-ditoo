@@ -32,6 +32,7 @@ AUTO_TIMEOUTS = {
     State.TOOL_USE: (4.0, State.IDLE),
     State.TYPING: (8.0, State.IDLE),
     State.THINKING: (60.0, State.IDLE),  # safety net
+    State.CODING: (60.0, State.IDLE),    # safety net; refreshed while actively coding
     State.POKE: (1.6, State.IDLE),
 }
 
@@ -152,6 +153,11 @@ class PetController:
             else:
                 self._overlays = {k: v for k, v in self._overlays.items() if k != key}
         self._state_changed.set()
+
+    def get_overlay(self, key: str) -> Optional[object]:
+        """Return the overlay registered under `key`, or None."""
+        with self._lock:
+            return self._overlays.get(key)
 
     def play_takeover(self, frames: List) -> None:
         """Queue a one-shot animation — a list of (frame, duration_ms) pairs — to

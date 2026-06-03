@@ -149,10 +149,94 @@ def celebrate(base, frames: int = 26, ms: int = 70, seed: Optional[int] = None) 
     return out
 
 
+def starfield(frames: int = 30, count: int = 18, ms: int = 80,
+              seed: Optional[int] = None) -> Anim:
+    """Twinkling stars drifting downward. Calm, ambient."""
+    rng = random.Random(seed)
+    stars = [
+        {"x": rng.randint(0, WIDTH - 1), "y": rng.uniform(0, WIDTH - 1),
+         "v": rng.uniform(0.15, 0.8), "b": rng.uniform(0.4, 1.0), "ph": rng.uniform(0, 6.28)}
+        for _ in range(count)
+    ]
+    out: Anim = []
+    for f in range(frames):
+        cv = Canvas(BLACK)
+        for s in stars:
+            y = int((s["y"] + s["v"] * f) % WIDTH)
+            twinkle = 0.6 + 0.4 * math.sin(f * 0.5 + s["ph"])
+            level = max(0, min(255, int(255 * s["b"] * twinkle)))
+            cv.set_pixel(s["x"], y, (level, level, level))
+        out.append((cv.to_frame(), ms))
+    return out
+
+
+def matrix_rain(frames: int = 34, ms: int = 75, color: RGB = COLORS["green"],
+                seed: Optional[int] = None) -> Anim:
+    """Falling green code-rain columns with bright heads and fading tails."""
+    rng = random.Random(seed)
+    cols = [
+        {"head": rng.uniform(-WIDTH, 0), "v": rng.uniform(0.5, 1.3), "len": rng.randint(3, 7)}
+        for _ in range(WIDTH)
+    ]
+    r, g, b = color
+    out: Anim = []
+    for f in range(frames):
+        cv = Canvas(BLACK)
+        for x, col in enumerate(cols):
+            head = col["head"] + col["v"] * f
+            for k in range(col["len"]):
+                y = int(head - k)
+                if 0 <= y < WIDTH:
+                    if k == 0:
+                        cv.set_pixel(x, y, (200, 255, 200))  # bright leading drop
+                    else:
+                        fade = 1.0 - k / col["len"]
+                        cv.set_pixel(x, y, (int(r * fade), int(g * fade), int(b * fade)))
+        out.append((cv.to_frame(), ms))
+    return out
+
+
+def spinner(frames: int = 24, ms: int = 70, color: RGB = COLORS["orange"],
+            center: Tuple[int, int] = (8, 8), radius: int = 5) -> Anim:
+    """A rotating comet of dots — a 'working' indicator."""
+    cx, cy = center
+    dots = 8
+    out: Anim = []
+    for f in range(frames):
+        cv = Canvas(BLACK)
+        head = f % dots
+        for i in range(dots):
+            angle = 2 * math.pi * i / dots
+            x = cx + math.cos(angle) * radius
+            y = cy + math.sin(angle) * radius
+            behind = (head - i) % dots
+            fade = max(0.12, 1.0 - behind * 0.16)
+            cv.set_pixel(int(round(x)), int(round(y)), tuple(int(ch * fade) for ch in color))
+        out.append((cv.to_frame(), ms))
+    return out
+
+
+def rainbow_sweep(frames: int = 28, ms: int = 70, sat: float = 0.85) -> Anim:
+    """A diagonal rainbow wipe cycling across the panel."""
+    out: Anim = []
+    for f in range(frames):
+        cv = Canvas()
+        for y in range(WIDTH):
+            for x in range(WIDTH):
+                hue = ((x + y) / (2 * WIDTH) + f / frames) % 1.0
+                cv.set_pixel(x, y, _hsv(hue, sat, 1.0))
+        out.append((cv.to_frame(), ms))
+    return out
+
+
 # Name → zero-arg-callable map for the live `effect` event.
 EFFECTS = {
     "confetti": confetti,
     "fireworks": fireworks,
     "plasma": plasma,
     "pulse": pulse,
+    "starfield": starfield,
+    "matrix": matrix_rain,
+    "spinner": spinner,
+    "rainbow": rainbow_sweep,
 }

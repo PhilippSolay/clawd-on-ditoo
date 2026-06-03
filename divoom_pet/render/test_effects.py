@@ -59,6 +59,10 @@ class RegistryTests(unittest.TestCase):
         for name, generator in EFFECTS.items():
             _valid_anim(self, generator())
 
+    def test_new_effects_are_registered(self):
+        for name in ("starfield", "matrix", "spinner", "rainbow"):
+            self.assertIn(name, EFFECTS)
+
 
 if __name__ == "__main__":
     unittest.main()

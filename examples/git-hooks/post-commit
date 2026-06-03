@@ -1,0 +1,10 @@
+#!/bin/bash
+# Clawd reacts when you commit. Install into a repo:
+#   cp examples/git-hooks/post-commit .git/hooks/ && chmod +x .git/hooks/post-commit
+# Set CLAWD_BIN if your checkout lives elsewhere.
+CLAWD="${CLAWD_BIN:-$HOME/code/divoom-pet/bin/clawd}"
+# A quick, subtle reaction (commits are frequent). Swap for any notify command:
+#   "$CLAWD" notify effect confetti
+#   "$CLAWD" notify banner "COMMIT" --color amber
+"$CLAWD" notify effect pulse >/dev/null 2>&1 || true
+exit 0

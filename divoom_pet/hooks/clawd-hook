@@ -34,13 +34,19 @@ post_state() {
     local state="$1"
     local note="${2:-}"
     local body
-    if [ -n "$note" ]; then
-        # naive but safe-enough escaping: strip quotes and limit length
-        note_safe=$(printf '%s' "$note" | tr -d '"\\' | cut -c1-40)
-        body=$(printf '{"state":"%s","note":"%s"}' "$state" "$note_safe")
-    else
-        body=$(printf '{"state":"%s"}' "$state")
-    fi
+    # Build the JSON body in python so quotes/unicode are escaped safely, and so we
+    # can attach this session's id (set below) for the multi-session fleet bar.
+    body=$(STATE="$state" NOTE="$note" SID="${session_id:-}" python3 -c '
+import json, os
+b = {"state": os.environ["STATE"]}
+note = os.environ.get("NOTE", "")
+if note:
+    b["note"] = note[:40]
+sid = os.environ.get("SID", "")
+if sid:
+    b["session_id"] = sid
+print(json.dumps(b))' 2>/dev/null)
+    [ -z "$body" ] && body=$(printf '{"state":"%s"}' "$state")
     curl -s --max-time "$TIMEOUT" -XPOST -H 'Content-Type: application/json' \
         -d "$body" "$DAEMON_URL/state" >/dev/null 2>&1 || true
 }
@@ -75,33 +81,40 @@ if [ ! -t 0 ]; then
     stdin_json=$(cat 2>/dev/null || true)
 fi
 
-# Extract a JSON string field via python (avoids jq dependency).
+# Extract a JSON string field via python (avoids jq dependency). The field name
+# is passed through the environment, never interpolated into the python source.
 json_field() {
     local field="$1"
     [ -z "$stdin_json" ] && return
-    printf '%s' "$stdin_json" | python3 -c "
-import json, sys
+    printf '%s' "$stdin_json" | FIELD="$field" python3 -c "
+import json, os, sys
+field = os.environ.get('FIELD', '')
 try:
     obj = json.loads(sys.stdin.read())
-    val = obj.get('$field', '') or obj.get('tool_input', {}).get('$field', '') or ''
+    val = obj.get(field, '') or obj.get('tool_input', {}).get(field, '') or ''
     print(val if isinstance(val, str) else json.dumps(val)[:40])
 except Exception:
     pass
 " 2>/dev/null
 }
 
+# This session's id rides along on every /state post (drives the fleet bar).
+session_id=$(json_field session_id)
+
 case "$action" in
     prompt)
-        post_state thinking "$(json_field session_id)"
+        # Active "working" look: Clawd at his laptop (the coding scene).
+        post_state coding
         ;;
     pre-tool)
+        # Keep the gear animation for actual tool calls.
         tool=$(json_field tool_name)
         post_state tool_use "${tool:-tool}"
         ;;
     post-tool)
-        # Quick beat back to thinking; daemon auto-falls to idle after timeout
+        # Back to the coding scene between tools; daemon auto-falls to idle on timeout.
         tool=$(json_field tool_name)
-        post_state thinking "$tool"
+        post_state coding "$tool"
         # TodoWrite drives a live progress bar from the todo list.
         [ "$tool" = "TodoWrite" ] && post_todo_progress
         ;;

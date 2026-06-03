@@ -87,7 +87,9 @@ def load_manifest(path) -> Tuple[str, Anim, bool]:
         flat = entry.get("px", [])
         ms = int(entry.get("ms", DEFAULT_FRAME_MS))
         frame = [(flat[i], flat[i + 1], flat[i + 2]) for i in range(0, len(flat) - 2, 3)]
-        if frame:
+        # Only accept exactly-256-pixel frames; a truncated/corrupt manifest would
+        # otherwise hand a wrong-length frame to the bridge (which then raises).
+        if len(frame) == WIDTH * WIDTH:
             frames.append((frame, ms))
     return str(data.get("name", "")), frames, bool(data.get("loop", True))
 

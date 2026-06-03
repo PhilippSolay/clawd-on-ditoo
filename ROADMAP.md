@@ -96,10 +96,46 @@ Rides entirely on Phase 1.
 
 ---
 
-## All four phases shipped. Possible follow-ups
+## All four phases shipped — verified on real hardware.
+
+### Follow-up round (polish · signals · content · hands-free) — ✅ **done**
+- **Polish:** overlays/banner are tunable per-call; on-device comparison confirmed
+  the defaults (1px bar, dark-backed badge).
+- **More content:** `effects.py` gained starfield / matrix rain / spinner / rainbow.
+- **More signals:** a procedural stacked HH:MM clock (`render/clock.py`, `notify
+  clock`); git-hook + test-result + launchd recipes in [`examples/`](examples/).
+- **Hands-free:** launchd watcher template + git hooks; the menu-bar app already
+  owns login autostart.
+
+### Sound themes — ✅ **done**
+- Switchable voice themes (`voice/themes.py`) on a richer pure-Python synth
+  (`voice/synth.py`: additive harmonics, FM, pitch glide, lowpass, echo): `marimba`
+  (default), `music_box`, `bubbly`, + legacy `chip`. Shared `GESTURES` rendered
+  through per-theme voices. `sounds.theme` config, live switch via `set_theme`,
+  `clawd sounds themes` / `preview --theme`, and a Settings picker in the app.
+- *Follow-up:* drop-in **sample-pack** themes (`~/.clawd/themes/<name>/*.wav`) so
+  users can add real designed sounds.
+
+### Coding scenes — ✅ **done**
+- Hand-authored crab-with-laptop animations (`sprites/coding.py`): `laptop` (typing
+  code), `terminal` (cursor), `compile` (Anthropic asterisk). A looping `coding`
+  State (defaults to the compile scene) + on-demand `clawd notify play <scene>`.
+- Hooks wire it "auto but keep the gear": prompt/post-tool → `coding`,
+  pre-tool → `tool_use`. To avoid a jarring pose flip per tool call, `tool_use`
+  now renders the **same laptop body** with a gear pulsing on the screen — so
+  coding↔tool only swaps the screen icon, not the whole crab.
+
+### Multi-session fleet bar — ✅ **done**
+- One daemon serves all sessions, so a bottom strip of dots shows each session's
+  state (running / needs-input / finished / idle), keyed by `session_id` with TTL
+  expiry. `daemon/sessions.py` registry + `SessionBar` overlay; hooks carry the
+  id; `/session` + `/sessions` endpoints; `clawd session|sessions` CLI.
+
+### Still open
 - Native `push_animation` device-side upload for ambient asset loops.
-- Number-word composition for arbitrary agent counts (>5) without a cold `say`.
-- A retune pass on overlay colors/sizes once seen on real hardware.
+- Number-word voice for arbitrary agent counts (>5) without a cold `say`.
+- "Active repo" auto-detection for `clawd watch` (today it follows a fixed repo).
+- Per-session blink for "needs input" (needs the render loop to tick faster).
 
 ---
 

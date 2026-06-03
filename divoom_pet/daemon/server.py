@@ -24,15 +24,20 @@ import shutil
 import signal
 import sys
 import threading
+import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import List, Optional
 
 from divoom_pet.config import CONFIG_PATH, Config
-from divoom_pet.render import COLORS, CountBadge, ProgressBar, banner, parse_color
+from divoom_pet.render import COLORS, CountBadge, ProgressBar, SessionBar, banner, compose, parse_color
 from divoom_pet.render.assets import AssetLibrary
+from divoom_pet.render.clock import clock_takeover
 from divoom_pet.render.effects import EFFECTS
 from divoom_pet.sprites import IdleOpts, State
+from divoom_pet.sprites.coding import SCENES as CODING_SCENES
+
+from .sessions import VALID_STATES, SessionRegistry, session_state_for_mood
 
 from .bridge import DitooBridge, find_bundled_bridge
 from .ears import Ears, find_ears_binary
@@ -40,6 +45,23 @@ from .state_machine import PetController
 from divoom_pet.voice.sounds import SoundPlayer
 
 log = logging.getLogger("server")
+
+
+# ---------- session fleet bar ----------
+
+
+def refresh_session_bar(registry: SessionRegistry, controller, now: float) -> None:
+    """Prune dead sessions and (re)draw the bottom dot strip — but only touch the
+    overlay when the set of states actually changed, to avoid needless repaints."""
+    registry.prune(now)
+    states = registry.states()
+    current = controller.get_overlay("sessions")
+    current_states = current.states if isinstance(current, SessionBar) else None
+    if states:
+        if states != current_states:
+            controller.set_overlay("sessions", SessionBar(states=states))
+    elif current is not None:
+        controller.clear_overlay("sessions")
 
 
 # ---------- HTTP handler ----------
@@ -52,17 +74,24 @@ class PetHandler(BaseHTTPRequestHandler):
     config: Config = None
     config_path: Path = CONFIG_PATH
     assets: Optional[AssetLibrary] = None
+    sessions: Optional[SessionRegistry] = None
 
     def log_message(self, fmt: str, *args) -> None:  # quieter logs
         log.debug("http: " + fmt, *args)
 
     # ----- helpers -----
 
+    MAX_BODY = 1 << 20  # 1 MiB — bodies are tiny JSON; cap so a bogus
+    #                     Content-Length can't trigger a huge allocation.
+
     def _read_json(self) -> dict:
-        length = int(self.headers.get("Content-Length") or 0)
-        if not length:
+        try:
+            length = int(self.headers.get("Content-Length") or 0)
+        except ValueError:
             return {}
-        raw = self.rfile.read(length)
+        if length <= 0:
+            return {}
+        raw = self.rfile.read(min(length, self.MAX_BODY))
         if not raw:
             return {}
         try:
@@ -91,6 +120,13 @@ class PetHandler(BaseHTTPRequestHandler):
             return self._reply(200, {"state": self.controller.current_state().value})
         if self.path.startswith("/config"):
             return self._reply(200, self.config.to_dict())
+        if self.path.startswith("/sessions"):
+            if self.sessions is None:
+                return self._reply(200, {"sessions": []})
+            self.sessions.prune(time.time())
+            return self._reply(200, {
+                "sessions": [{"id": sid, "state": st} for sid, st in self.sessions.snapshot()],
+            })
         return self._reply(404, {"error": "not found"})
 
     def do_POST(self) -> None:
@@ -102,7 +138,23 @@ class PetHandler(BaseHTTPRequestHandler):
             except ValueError:
                 return self._reply(400, {"error": f"unknown state: {name}"})
             self.controller.set_state(target, note=body.get("note", ""))
+            # A session_id rides along on hook posts: track this session in the fleet.
+            session_id = body.get("session_id")
+            if session_id and self.sessions is not None:
+                self.sessions.update(str(session_id), session_state_for_mood(target.value), time.time())
+                refresh_session_bar(self.sessions, self.controller, time.time())
             return self._reply(200, {"ok": True, "state": target.value})
+        if self.path == "/session":
+            session_id = str(body.get("session_id") or "").strip()
+            status = str(body.get("status") or "").strip().lower()
+            if not session_id:
+                return self._reply(400, {"error": "session needs a 'session_id'"})
+            if status not in VALID_STATES:
+                return self._reply(400, {"error": f"status must be one of {sorted(VALID_STATES)}"})
+            if self.sessions is not None:
+                self.sessions.update(session_id, status, time.time())
+                refresh_session_bar(self.sessions, self.controller, time.time())
+            return self._reply(200, {"ok": True, "session_id": session_id, "status": status})
         if self.path == "/touch":
             self.controller.touch()
             return self._reply(200, {"ok": True})
@@ -163,6 +215,7 @@ class PetHandler(BaseHTTPRequestHandler):
               "mood":"happy","speak":"done"}                     (+ optional mood/voice)
           {"kind":"play","name":"confetti_gif","mood":"happy"}   a built asset by name
           {"kind":"effect","name":"confetti"}                    a procedural effect
+          {"kind":"clock","color":"cyan"}                        show the time (HH over MM)
           {"kind":"agent_done"}                                  tick the agent tally
           {"kind":"agents_reset"}                                zero the tally + badge
           {"kind":"clear","name":"progress"}                     clear one / all
@@ -205,9 +258,12 @@ class PetHandler(BaseHTTPRequestHandler):
         if kind == "play":
             name = str(body.get("name", ""))
             anim = self.assets.get(name) if self.assets else None
+            if anim is None and name in CODING_SCENES:
+                # In-code coding scene → compose its sprites; loop a few times for a one-shot.
+                anim = [(compose(sprite), ms) for sprite, ms in CODING_SCENES[name]] * 3
             if not anim:
-                available = self.assets.names() if self.assets else []
-                return self._reply(404, {"error": f"no asset named {name!r}",
+                available = (self.assets.names() if self.assets else []) + list(CODING_SCENES)
+                return self._reply(404, {"error": f"no asset/scene named {name!r}",
                                          "available": available})
             c.play_takeover(anim)
             self._mood_and_speak(body)
@@ -223,6 +279,13 @@ class PetHandler(BaseHTTPRequestHandler):
             c.play_takeover(generator())
             self._mood_and_speak(body)
             return self._reply(200, {"ok": True, "kind": "effect", "name": name})
+
+        if kind == "clock":
+            color = parse_color(body.get("color"), COLORS["cyan"])
+            now = time.localtime()
+            c.play_takeover(clock_takeover(now.tm_hour, now.tm_min, color=color))
+            return self._reply(200, {"ok": True, "kind": "clock",
+                                     "time": f"{now.tm_hour:02d}:{now.tm_min:02d}"})
 
         if kind == "agent_done":
             count = c.agent_came_home()
@@ -287,6 +350,8 @@ def apply_config(new: Config, old: Config, controller: PetController,
         sounds.spoken_lines = new.voice.spoken_lines
         if new.sounds.volume != old.sounds.volume:
             sounds.set_volume(new.sounds.volume)
+        if new.sounds.theme != old.sounds.theme:
+            sounds.set_theme(new.sounds.theme)
         if new.voice.tts_voice != old.voice.tts_voice:
             sounds.set_tts_voice(new.voice.tts_voice)
         if new.sounds.audio_device != old.sounds.audio_device:
@@ -385,6 +450,7 @@ def main(argv=None) -> int:
         enabled=cfg.sounds.enabled, device=cfg.sounds.audio_device,
         volume=cfg.sounds.volume, babble=cfg.voice.babble,
         spoken_lines=cfg.voice.spoken_lines, tts_voice=cfg.voice.tts_voice,
+        theme=cfg.sounds.theme,
     )
     controller = PetController(
         bridge=bridge, sounds=sounds,
@@ -416,8 +482,21 @@ def main(argv=None) -> int:
     PetHandler.assets = AssetLibrary.from_dir()
     log.info("asset library: %d animation(s) %s", len(PetHandler.assets.names()),
              PetHandler.assets.names())
+    sessions = SessionRegistry()
+    PetHandler.sessions = sessions
 
     controller.start(initial_state=State.HATCH)
+
+    # Periodically expire stale sessions so the fleet bar clears on its own.
+    def _prune_sessions() -> None:
+        while True:
+            time.sleep(8.0)
+            try:
+                refresh_session_bar(sessions, controller, time.time())
+            except Exception as e:
+                log.debug("session prune failed: %s", e)
+
+    threading.Thread(target=_prune_sessions, daemon=True, name="session-prune").start()
     if ears:
         try:
             ears.start()

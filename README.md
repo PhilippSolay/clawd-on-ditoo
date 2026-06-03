@@ -104,7 +104,12 @@ A few settings (`device.mac`, `device.channel`, `sounds.audio_device`) need a re
 ## Make him yours
 
 - **Sprites** — `divoom_pet/sprites/clawd.py` (16-row strings, one char per pixel). Regenerate the gallery: `python3 -m divoom_pet.sprites.clawd previews/`.
-- **Voice** — `divoom_pet/voice/sounds.py`: `CHIRPS` (chiptune melodies, multiple random variants each), `SPOKEN` (TTS one-liners), and an animalese-style babble so he can mutter to himself. Audition: `clawd sounds preview`.
+- **Voice** — switchable **sound themes** in `divoom_pet/voice/themes.py`: `bubbly`
+  (pitch-glide bloops, default), `marimba` (warm mallet), `music_box` (bell + echo),
+  and `chip` (the original 8-bit). Shared melodies (`GESTURES`) rendered through
+  per-theme voices built on a small pure-Python synth (`voice/synth.py`). Switch in
+  the menu-bar app's Settings, or `clawd config set sounds.theme music_box`. Audition
+  any: `clawd sounds preview --theme bubbly`. Plus `SPOKEN` TTS one-liners + live `say`.
 - **Vibes** — `AUTO_TIMEOUTS` / idle behavior in `divoom_pet/daemon/state_machine.py` and the idle fidget weights in `clawd.py`.
 
 ## The full CLI
@@ -117,15 +122,16 @@ clawd poke / chirp / demo              mess with him
 clawd notify progress|badge|banner     push live content (see below)
 clawd notify play|effect <name>        play a drop-in asset / procedural effect
 clawd say "text"                       speak arbitrary text (live voice)
+clawd sessions                         list live Claude Code sessions (fleet bar)
 clawd assets [build|list]              turn assets/*.png|gif into animations
 clawd watch [--repo R] [--interval S]  react to GitHub PRs / CI (needs gh)
-clawd sounds [preview|render]          audition / rebuild the voice
+clawd sounds [preview|render|themes]   audition the voice / list sound themes
 clawd config [show | set K V]          read / change settings
 clawd doctor                           "is the crab okay??"
 clawd install-hooks                    wire into Claude Code
 ```
 
-States: `idle thinking typing tool_use happy alert sleeping hatch poke`.
+States: `idle thinking typing tool_use happy alert sleeping hatch poke coding`.
 
 ## Live content: Clawd shows you what's happening 📊
 
@@ -149,14 +155,22 @@ Wired into Claude Code (via `install-hooks`) he does this automatically:
 - **`clawd watch`** polls a repo with `gh`: a **new PR**, **CI red/green**, or a
   **merge** triggers a banner (+ mood + voice). Run it inside your repo, or point
   it anywhere with `--repo owner/name`.
+- **Session fleet bar** — one pet daemon serves *all* your Claude Code sessions, so
+  a strip of dots along the bottom shows each one's state at a glance: 🟠 running,
+  🔴 needs-input, 🟢 finished (dropping off as they go idle). It lights up
+  automatically once hooks are installed; inspect it with `clawd sessions`.
 
 ### Animations: procedural *and* drop-in
 
 Two ways to give Clawd new moves:
 
 ```bash
-clawd notify effect confetti     # procedural: confetti / fireworks / plasma / pulse
-                                 #   — "live-created" from math, no art files
+clawd notify effect confetti     # procedural, "live-created" from math, no art files:
+                                 #   confetti fireworks plasma pulse
+                                 #   starfield matrix spinner rainbow
+clawd notify clock               # show the time (HH stacked over MM)
+clawd notify play laptop         # coding scenes: laptop / terminal / compile
+                                 #   (the crab peeking over a laptop, claws tapping)
 
 cp my_cute_loop.gif assets/      # drop-in: any PNG/GIF
 clawd assets build               # → downscaled to 16×16, palette-snapped, named
@@ -180,6 +194,12 @@ done"…) is pre-rendered shortly after startup, so those speak instantly (~650 
 Anything novel renders once via `say` (~1.7 s) and is cached, so it's warm next
 time. `clawd watch` uses these phrases, so a merge actually *says* "Pull request
 merged!" while the banner scrolls.
+
+### Hands-free
+
+Let Clawd run himself — git-hook recipes (react to commits/merges), an always-on
+launchd PR watcher, and a test-result wrapper all live in [`examples/`](examples/).
+Copy, tweak the paths, done.
 
 ## Under the shell
 

@@ -127,6 +127,40 @@ class CountBadge(Overlay):
         draw_text(canvas, x, y, text, self.color)
 
 
+# Canonical session states (shared with the daemon's SessionRegistry) + their dot
+# colors. Defined here in the render layer because the SessionBar overlay owns the
+# visual vocabulary; the daemon imports these names.
+SESSION_RUNNING = "running"
+SESSION_FINISHED = "finished"
+SESSION_NEEDS_INPUT = "needs_input"
+SESSION_IDLE = "idle"
+
+SESSION_COLORS = {
+    SESSION_RUNNING: COLORS["amber"],     # actively working
+    SESSION_FINISHED: COLORS["green"],    # turn complete
+    SESSION_NEEDS_INPUT: COLORS["red"],   # waiting on you
+    SESSION_IDLE: COLORS["dim"],          # quiet
+}
+
+
+@dataclass(frozen=True)
+class SessionBar(Overlay):
+    """A strip of status dots along the bottom — one per live Claude Code session,
+    colored by state. `states` is ordered by session age so each keeps its slot."""
+
+    states: Tuple[str, ...]
+    row: int = WIDTH - 1   # bottom row (below Clawd's legs)
+    pitch: int = 2         # px between dot starts; auto-tightens when crowded
+
+    def draw(self, canvas: Canvas) -> None:
+        n = len(self.states)
+        if n == 0:
+            return
+        pitch = self.pitch if n * self.pitch <= WIDTH else 1  # pack tighter if many
+        for i, state in enumerate(self.states[:WIDTH]):
+            canvas.set_pixel(i * pitch, self.row, SESSION_COLORS.get(state, COLORS["dim"]))
+
+
 # -------------------- takeovers (one-shot animations) --------------------
 
 

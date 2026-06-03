@@ -27,9 +27,11 @@ class PhraseSlugTests(unittest.TestCase):
 class RenderSayTests(unittest.TestCase):
     def test_builds_say_command_and_reports_success(self):
         calls = []
+        inputs = []
 
         def fake_run(args, **kwargs):
             calls.append(args)
+            inputs.append(kwargs.get("input"))
             Path(args[args.index("-o") + 1]).write_bytes(b"RIFF")  # simulate say writing a file
             return None
 
@@ -37,11 +39,13 @@ class RenderSayTests(unittest.TestCase):
         snd.subprocess.run = fake_run
         try:
             with tempfile.TemporaryDirectory() as d:
-                ok = snd.render_say_to_wav("hello", Path(d) / "out.wav", voice="Zoe")
+                ok = snd.render_say_to_wav("--dangerous flag", Path(d) / "out.wav", voice="Zoe")
             self.assertTrue(ok)
             self.assertIn("-v", calls[0])
             self.assertIn("Zoe", calls[0])
-            self.assertIn("hello", calls[0])
+            # Text goes on stdin, NOT argv — so a leading '-' can't become a say flag.
+            self.assertEqual(inputs[0], "--dangerous flag")
+            self.assertNotIn("--dangerous flag", calls[0])
         finally:
             snd.subprocess.run = orig
 
@@ -76,6 +80,25 @@ class SayCacheTests(unittest.TestCase):
                 snd.SOUNDS_DIR, snd.render_say_to_wav = orig_dir, orig_render
         self.assertEqual(sp._played, [cached])
         self.assertEqual(rendered, [])  # warm hit: no render
+
+    def test_set_tts_voice_keeps_active_theme(self):
+        # Regression: set_tts_voice must re-render with the player's theme, not 'chip'.
+        sp = self._player()
+        sp.theme = "marimba"
+        sp.tts_voice = "OldVoice"
+        sp.paths = {}
+        sp._warm_vocab = lambda: None  # no-op the background re-warm
+        captured = []
+        orig_render, orig_dir = snd.render_all, snd.SOUNDS_DIR
+        with tempfile.TemporaryDirectory() as d:
+            snd.SOUNDS_DIR = Path(d)
+            snd.render_all = lambda *a, **k: captured.append(k) or {}
+            try:
+                sp.set_tts_voice("NewVoice")
+            finally:
+                snd.render_all, snd.SOUNDS_DIR = orig_render, orig_dir
+        self.assertTrue(captured)
+        self.assertEqual(captured[-1].get("theme"), "marimba")
 
     def test_novel_phrase_renders_then_plays(self):
         sp = self._player()

@@ -42,6 +42,20 @@ class AssetLibraryTests(unittest.TestCase):
     def test_missing_dir_is_empty(self):
         self.assertEqual(AssetLibrary.from_dir("/no/such/dir/xyz").names(), [])
 
+    def test_load_manifest_drops_wrong_size_frames(self):
+        import json
+        good = [1, 2, 3] * PIXELS   # 256 px
+        bad = [9, 9, 9] * 10        # 10 px — corrupt/truncated
+        with tempfile.TemporaryDirectory() as d:
+            p = Path(d) / "x.json"
+            p.write_text(json.dumps({
+                "name": "x", "loop": True,
+                "frames": [{"ms": 100, "px": good}, {"ms": 100, "px": bad}],
+            }))
+            _name, frames, _loop = load_manifest(p)
+            self.assertEqual(len(frames), 1)              # the 10-px frame is dropped
+            self.assertEqual(len(frames[0][0]), PIXELS)
+
     def test_corrupt_manifest_skipped(self):
         frames = [([GREEN] * PIXELS, 100)]
         with tempfile.TemporaryDirectory() as d:
