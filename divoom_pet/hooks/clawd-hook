@@ -81,15 +81,17 @@ if [ ! -t 0 ]; then
     stdin_json=$(cat 2>/dev/null || true)
 fi
 
-# Extract a JSON string field via python (avoids jq dependency).
+# Extract a JSON string field via python (avoids jq dependency). The field name
+# is passed through the environment, never interpolated into the python source.
 json_field() {
     local field="$1"
     [ -z "$stdin_json" ] && return
-    printf '%s' "$stdin_json" | python3 -c "
-import json, sys
+    printf '%s' "$stdin_json" | FIELD="$field" python3 -c "
+import json, os, sys
+field = os.environ.get('FIELD', '')
 try:
     obj = json.loads(sys.stdin.read())
-    val = obj.get('$field', '') or obj.get('tool_input', {}).get('$field', '') or ''
+    val = obj.get(field, '') or obj.get('tool_input', {}).get(field, '') or ''
     print(val if isinstance(val, str) else json.dumps(val)[:40])
 except Exception:
     pass

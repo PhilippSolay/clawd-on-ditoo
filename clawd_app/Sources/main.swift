@@ -47,12 +47,89 @@ extension NSBezierPath {
 
 // MARK: - Config model (mirrors ~/.clawd/config.json; snake_case <-> camelCase)
 
-struct DeviceCfg: Codable { var mac: String? = nil; var channel: Int = 2 }
-struct SoundsCfg: Codable { var enabled = true; var volume = 0.6; var audioDevice = "DitooPro"; var theme = "bubbly" }
-struct VoiceCfg: Codable { var babble = true; var spokenLines = true; var ttsVoice: String? = nil }
-struct MicCfg: Codable { var enabled = true; var clapFloor = 0.06; var clapRise = 4.0; var doubleWindow = 0.55 }
-struct AnimationsCfg: Codable { var brightness = 70; var idleFidgets = true; var fidgetFrequency = 1.0; var blink = true }
-struct SleepCfg: Codable { var idleToSleepSeconds = 240.0 }
+// NOTE: each struct has an explicit init(from:) using decodeIfPresent. Swift's
+// *synthesized* Codable init does NOT fall back to a stored-property default for a
+// missing JSON key — it throws keyNotFound — which (under the `try?` decode sites)
+// would silently wipe the user's whole config the moment the daemon adds a new
+// field (e.g. sounds.theme). decodeIfPresent makes every key optional-with-default.
+
+struct DeviceCfg: Codable {
+    var mac: String? = nil
+    var channel = 2
+    init() {}
+    init(from d: Decoder) throws {
+        let c = try d.container(keyedBy: CodingKeys.self)
+        mac = try c.decodeIfPresent(String.self, forKey: .mac)
+        channel = try c.decodeIfPresent(Int.self, forKey: .channel) ?? 2
+    }
+}
+
+struct SoundsCfg: Codable {
+    var enabled = true
+    var volume = 0.6
+    var audioDevice = "DitooPro"
+    var theme = "bubbly"
+    init() {}
+    init(from d: Decoder) throws {
+        let c = try d.container(keyedBy: CodingKeys.self)
+        enabled = try c.decodeIfPresent(Bool.self, forKey: .enabled) ?? true
+        volume = try c.decodeIfPresent(Double.self, forKey: .volume) ?? 0.6
+        audioDevice = try c.decodeIfPresent(String.self, forKey: .audioDevice) ?? "DitooPro"
+        theme = try c.decodeIfPresent(String.self, forKey: .theme) ?? "bubbly"
+    }
+}
+
+struct VoiceCfg: Codable {
+    var babble = true
+    var spokenLines = true
+    var ttsVoice: String? = nil
+    init() {}
+    init(from d: Decoder) throws {
+        let c = try d.container(keyedBy: CodingKeys.self)
+        babble = try c.decodeIfPresent(Bool.self, forKey: .babble) ?? true
+        spokenLines = try c.decodeIfPresent(Bool.self, forKey: .spokenLines) ?? true
+        ttsVoice = try c.decodeIfPresent(String.self, forKey: .ttsVoice)
+    }
+}
+
+struct MicCfg: Codable {
+    var enabled = true
+    var clapFloor = 0.06
+    var clapRise = 4.0
+    var doubleWindow = 0.55
+    init() {}
+    init(from d: Decoder) throws {
+        let c = try d.container(keyedBy: CodingKeys.self)
+        enabled = try c.decodeIfPresent(Bool.self, forKey: .enabled) ?? true
+        clapFloor = try c.decodeIfPresent(Double.self, forKey: .clapFloor) ?? 0.06
+        clapRise = try c.decodeIfPresent(Double.self, forKey: .clapRise) ?? 4.0
+        doubleWindow = try c.decodeIfPresent(Double.self, forKey: .doubleWindow) ?? 0.55
+    }
+}
+
+struct AnimationsCfg: Codable {
+    var brightness = 70
+    var idleFidgets = true
+    var fidgetFrequency = 1.0
+    var blink = true
+    init() {}
+    init(from d: Decoder) throws {
+        let c = try d.container(keyedBy: CodingKeys.self)
+        brightness = try c.decodeIfPresent(Int.self, forKey: .brightness) ?? 70
+        idleFidgets = try c.decodeIfPresent(Bool.self, forKey: .idleFidgets) ?? true
+        fidgetFrequency = try c.decodeIfPresent(Double.self, forKey: .fidgetFrequency) ?? 1.0
+        blink = try c.decodeIfPresent(Bool.self, forKey: .blink) ?? true
+    }
+}
+
+struct SleepCfg: Codable {
+    var idleToSleepSeconds = 240.0
+    init() {}
+    init(from d: Decoder) throws {
+        let c = try d.container(keyedBy: CodingKeys.self)
+        idleToSleepSeconds = try c.decodeIfPresent(Double.self, forKey: .idleToSleepSeconds) ?? 240.0
+    }
+}
 
 struct ClawdConfig: Codable {
     var device = DeviceCfg()
@@ -61,6 +138,17 @@ struct ClawdConfig: Codable {
     var mic = MicCfg()
     var animations = AnimationsCfg()
     var sleep = SleepCfg()
+
+    init() {}
+    init(from d: Decoder) throws {
+        let c = try d.container(keyedBy: CodingKeys.self)
+        device = try c.decodeIfPresent(DeviceCfg.self, forKey: .device) ?? DeviceCfg()
+        sounds = try c.decodeIfPresent(SoundsCfg.self, forKey: .sounds) ?? SoundsCfg()
+        voice = try c.decodeIfPresent(VoiceCfg.self, forKey: .voice) ?? VoiceCfg()
+        mic = try c.decodeIfPresent(MicCfg.self, forKey: .mic) ?? MicCfg()
+        animations = try c.decodeIfPresent(AnimationsCfg.self, forKey: .animations) ?? AnimationsCfg()
+        sleep = try c.decodeIfPresent(SleepCfg.self, forKey: .sleep) ?? SleepCfg()
+    }
 
     static func decoder() -> JSONDecoder {
         let d = JSONDecoder(); d.keyDecodingStrategy = .convertFromSnakeCase; return d

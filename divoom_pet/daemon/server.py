@@ -81,11 +81,17 @@ class PetHandler(BaseHTTPRequestHandler):
 
     # ----- helpers -----
 
+    MAX_BODY = 1 << 20  # 1 MiB — bodies are tiny JSON; cap so a bogus
+    #                     Content-Length can't trigger a huge allocation.
+
     def _read_json(self) -> dict:
-        length = int(self.headers.get("Content-Length") or 0)
-        if not length:
+        try:
+            length = int(self.headers.get("Content-Length") or 0)
+        except ValueError:
             return {}
-        raw = self.rfile.read(length)
+        if length <= 0:
+            return {}
+        raw = self.rfile.read(min(length, self.MAX_BODY))
         if not raw:
             return {}
         try:
@@ -117,8 +123,7 @@ class PetHandler(BaseHTTPRequestHandler):
         if self.path.startswith("/sessions"):
             if self.sessions is None:
                 return self._reply(200, {"sessions": []})
-            import time as _t
-            self.sessions.prune(_t.time())
+            self.sessions.prune(time.time())
             return self._reply(200, {
                 "sessions": [{"id": sid, "state": st} for sid, st in self.sessions.snapshot()],
             })

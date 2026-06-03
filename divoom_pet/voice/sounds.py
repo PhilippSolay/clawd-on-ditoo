@@ -317,10 +317,11 @@ def render_say_to_wav(text: str, path: Path, voice: Optional[str] = None,
     args = ["say", "-o", str(path), "--data-format=LEI16@22050", "--file-format=WAVE"]
     if voice:
         args += ["-v", voice]
-    args.append(text)
+    # Feed the text on stdin (not as an argv operand) so text starting with '-'
+    # can never be misread as a `say` flag (e.g. --output-file=…).
     try:
-        subprocess.run(args, check=False, stdout=subprocess.DEVNULL,
-                       stderr=subprocess.DEVNULL, timeout=timeout)
+        subprocess.run(args, input=text, text=True, check=False,
+                       stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=timeout)
         return path.exists()
     except Exception as e:
         log.warning("say render failed for %r: %s", text[:40], e)
@@ -558,12 +559,21 @@ class SoundPlayer:
                                      chirps_only=True, theme=theme))
 
     def set_tts_voice(self, voice: Optional[str]) -> None:
-        """Switch the spoken-line voice and re-render the `say` lines."""
+        """Switch the spoken-line voice and re-render the `say` lines. Keeps the
+        active chirp theme, and clears the cached live-voice phrases so they
+        re-render in the new voice (they're keyed only on text)."""
         if voice == self.tts_voice:
             return
         self.tts_voice = voice
-        if self.enabled:
-            self.paths.update(render_all(force=True, voice=voice))
+        if not self.enabled:
+            return
+        for old in SOUNDS_DIR.glob("saylive_*.wav"):
+            try:
+                old.unlink()
+            except OSError:
+                pass
+        self.paths.update(render_all(force=True, voice=voice, theme=self.theme))
+        threading.Thread(target=self._warm_vocab, daemon=True, name="vocab-rewarm").start()
 
     def keepalive_tick(self) -> None:
         # With routed serve mode the engine already keeps the link warm; only the
