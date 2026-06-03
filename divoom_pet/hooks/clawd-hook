@@ -9,9 +9,14 @@
 #       "PreToolUse":       [{"hooks": [{"type": "command", "command": "<path>/clawd-hook pre-tool"}]}],
 #       "PostToolUse":      [{"hooks": [{"type": "command", "command": "<path>/clawd-hook post-tool"}]}],
 #       "Notification":     [{"hooks": [{"type": "command", "command": "<path>/clawd-hook alert"}]}],
-#       "Stop":             [{"hooks": [{"type": "command", "command": "<path>/clawd-hook stop"}]}]
+#       "Stop":             [{"hooks": [{"type": "command", "command": "<path>/clawd-hook stop"}]}],
+#       "SubagentStop":     [{"hooks": [{"type": "command", "command": "<path>/clawd-hook subagent"}]}],
+#       "SessionStart":     [{"hooks": [{"type": "command", "command": "<path>/clawd-hook session-start"}]}]
 #     }
 #   }
+#
+# Live content: post-tool detects TodoWrite and drives a real progress bar from the
+# todo list; subagent ticks an "agents finished" tally badge; session-start resets it.
 #
 # Hooks receive the full hook payload as JSON on stdin. We read enough to get the
 # tool_name (for PreToolUse) and pass it as a note to the daemon.
@@ -38,6 +43,30 @@ post_state() {
     fi
     curl -s --max-time "$TIMEOUT" -XPOST -H 'Content-Type: application/json' \
         -d "$body" "$DAEMON_URL/state" >/dev/null 2>&1 || true
+}
+
+# Fire a raw event at the live-content surface (progress / badge / banner / tally).
+post_event() {
+    curl -s --max-time "$TIMEOUT" -XPOST -H 'Content-Type: application/json' \
+        -d "$1" "$DAEMON_URL/event" >/dev/null 2>&1 || true
+}
+
+# Derive a progress bar from a TodoWrite payload: completed / total todos.
+post_todo_progress() {
+    [ -z "$stdin_json" ] && return
+    body=$(printf '%s' "$stdin_json" | python3 -c "
+import json, sys
+try:
+    obj = json.loads(sys.stdin.read())
+    todos = obj.get('tool_input', {}).get('todos', []) or []
+    total = len(todos)
+    done = sum(1 for t in todos if t.get('status') == 'completed')
+    if total:
+        print(json.dumps({'kind': 'progress', 'value': done / total, 'color': 'green'}))
+except Exception:
+    pass
+" 2>/dev/null)
+    [ -n "$body" ] && post_event "$body"
 }
 
 # Read stdin JSON (if any) without failing when no input is provided.
@@ -71,19 +100,32 @@ case "$action" in
         ;;
     post-tool)
         # Quick beat back to thinking; daemon auto-falls to idle after timeout
-        post_state thinking "$(json_field tool_name)"
+        tool=$(json_field tool_name)
+        post_state thinking "$tool"
+        # TodoWrite drives a live progress bar from the todo list.
+        [ "$tool" = "TodoWrite" ] && post_todo_progress
         ;;
     alert)
         post_state alert "$(json_field message)"
         ;;
     stop)
         post_state happy "done"
+        post_event '{"kind":"progress","clear":true}'
+        ;;
+    subagent)
+        # A subagent finished — tick the "agents home" tally badge.
+        post_event '{"kind":"agent_done"}'
+        ;;
+    session-start)
+        # New session: reset the tally + clear any stale progress bar.
+        post_event '{"kind":"agents_reset"}'
+        post_event '{"kind":"progress","clear":true}'
         ;;
     touch)
         curl -s --max-time "$TIMEOUT" -XPOST "$DAEMON_URL/touch" >/dev/null 2>&1 || true
         ;;
     *)
-        echo "Usage: clawd-hook prompt|pre-tool|post-tool|alert|stop|touch" >&2
+        echo "Usage: clawd-hook prompt|pre-tool|post-tool|alert|stop|subagent|session-start|touch" >&2
         exit 64
         ;;
 esac

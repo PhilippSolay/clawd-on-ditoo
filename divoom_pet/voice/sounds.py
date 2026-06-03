@@ -13,6 +13,7 @@ Sounds are rendered once into ~/.clawd/sounds/ and reused.
 
 from __future__ import annotations
 
+import hashlib
 import logging
 import math
 import os
@@ -285,8 +286,45 @@ SPOKEN: Dict[str, List[str]] = {
     "poke": ["Hey!", "Oh, hi!", "Boop!"],
 }
 
+# Warm vocabulary: full announcement phrases pre-rendered shortly after startup so
+# live content (PR merged, CI status, agent tallies) speaks instantly (~650ms warm)
+# instead of paying ~1.7s for a cold `say`. Anything outside this set falls back to
+# a live render that's cached on first use — so it's warm the next time too.
+VOCAB: List[str] = [
+    "All done!", "Nice work.", "Shipping it.",
+    "Pull request merged!", "New pull request.", "Pull request closed.",
+    "Tests passed.", "Tests are failing.", "C I is red.",
+    "One agent done.", "Two agents done.", "Three agents done.",
+    "Four agents done.", "Five agents done.",
+]
+
+
+def _phrase_slug(text: str) -> str:
+    """Stable cache key (filename stem) for an arbitrary spoken phrase."""
+    norm = " ".join(text.lower().split())
+    return "saylive_" + hashlib.sha1(norm.encode("utf-8")).hexdigest()[:12]
+
 
 # ---- rendering / caching ----
+
+
+def render_say_to_wav(text: str, path: Path, voice: Optional[str] = None,
+                      timeout: float = 12.0) -> bool:
+    """Render `text` to a Ditoo-format WAV (22050 Hz mono Int16 LE) via macOS `say`.
+    Returns True if the file was produced. Shared by the warm-vocab pre-render and
+    the live `say()` fallback."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    args = ["say", "-o", str(path), "--data-format=LEI16@22050", "--file-format=WAVE"]
+    if voice:
+        args += ["-v", voice]
+    args.append(text)
+    try:
+        subprocess.run(args, check=False, stdout=subprocess.DEVNULL,
+                       stderr=subprocess.DEVNULL, timeout=timeout)
+        return path.exists()
+    except Exception as e:
+        log.warning("say render failed for %r: %s", text[:40], e)
+        return False
 
 
 def render_all(force: bool = False, voice: Optional[str] = None,
@@ -324,15 +362,7 @@ def render_all(force: bool = False, voice: Optional[str] = None,
             for i, text in enumerate(texts):
                 p = SOUNDS_DIR / f"say_{name}_{i}.wav"
                 if force or not p.exists():
-                    args = ["say", "-o", str(p),
-                            "--data-format=LEI16@22050", "--file-format=WAVE"]
-                    if voice:
-                        args += ["-v", voice]
-                    args.append(text)
-                    try:
-                        subprocess.run(args, check=False, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-                    except Exception as e:
-                        log.warning("pre-render say failed for %s[%d]: %s", name, i, e)
+                    render_say_to_wav(text, p, voice)
                 if p.exists():
                     paths[f"say_{name}_{i}"] = p
             if f"say_{name}_0" in paths:
@@ -390,6 +420,9 @@ class SoundPlayer:
         self._serve_lock = threading.Lock()
         if self.enabled and self._play_bin and self.device:
             self._start_serve()
+        # Pre-warm the announcement vocabulary in the background (don't slow boot).
+        if self.enabled:
+            threading.Thread(target=self._warm_vocab, daemon=True, name="vocab-warm").start()
         log.info("sound player enabled=%s routed=%s device=%s, %d sounds in %s",
                  self.enabled, self.routed, self.device, len(self.paths), SOUNDS_DIR)
 
@@ -464,6 +497,35 @@ class SoundPlayer:
         variants = self._variants("say_", name)
         if variants:
             self._play_file(random.choice(variants))
+
+    def say(self, text: str) -> None:
+        """Speak arbitrary text — the *live voice*. Warm phrases (pre-rendered vocab
+        or something said before) play instantly; a novel phrase renders once via
+        `say` (~1.7s) and is cached so it's warm next time. Non-blocking: the render
+        + playback happen on a background thread so callers (HTTP handlers) return
+        immediately."""
+        if not self.enabled or not self.spoken_lines:
+            return
+        text = (text or "").strip()
+        if not text:
+            return
+        threading.Thread(target=self._say_blocking, args=(text,), daemon=True,
+                         name="say").start()
+
+    def _say_blocking(self, text: str) -> None:
+        path = SOUNDS_DIR / f"{_phrase_slug(text)}.wav"
+        if not path.exists():
+            render_say_to_wav(text, path, self.tts_voice)
+        if path.exists():
+            self._play_file(path)
+
+    def _warm_vocab(self) -> None:
+        """Pre-render the warm VOCAB in the background so the first real announcement
+        is already cached. Idempotent — skips phrases already on disk."""
+        for phrase in VOCAB:
+            path = SOUNDS_DIR / f"{_phrase_slug(phrase)}.wav"
+            if not path.exists():
+                render_say_to_wav(phrase, path, self.tts_voice)
 
     def set_volume(self, v: float) -> None:
         """Apply a new loudness and re-render the chirps (fast; skips TTS)."""

@@ -157,6 +157,115 @@ def cmd_chirp(args) -> int:
     return 0
 
 
+def cmd_notify(args) -> int:
+    """Push live content to Clawd: a progress bar, a corner count badge, or a
+    one-shot banner takeover. Thin wrapper over POST /event."""
+    kind = args.kind
+    body = {"kind": kind}
+
+    if kind == "progress":
+        if args.clear:
+            body["clear"] = True
+        elif args.value is not None:
+            body["value"] = _coerce(args.value)
+        else:
+            print("usage: clawd notify progress <0..1> | --clear", file=sys.stderr)
+            return 2
+        if args.color:
+            body["color"] = args.color
+    elif kind == "badge":
+        if args.clear:
+            body["clear"] = True
+        elif args.value is not None:
+            try:
+                body["count"] = int(float(args.value))
+            except ValueError:
+                print("badge count must be a number", file=sys.stderr)
+                return 2
+        else:
+            print("usage: clawd notify badge <count> | --clear", file=sys.stderr)
+            return 2
+        if args.corner:
+            body["corner"] = args.corner
+        if args.color:
+            body["color"] = args.color
+    elif kind == "banner":
+        if not args.value:
+            print('usage: clawd notify banner "TEXT" [--color C] [--mood M] [--speak S]', file=sys.stderr)
+            return 2
+        body["text"] = args.value
+        for flag in ("color", "mood", "speak", "say"):
+            val = getattr(args, flag)
+            if val:
+                body[flag] = val
+    elif kind in ("play", "effect"):
+        if not args.value:
+            print(f"usage: clawd notify {kind} <name> [--mood M] [--say TEXT]", file=sys.stderr)
+            return 2
+        body["name"] = args.value
+        for flag in ("mood", "speak", "say"):
+            val = getattr(args, flag)
+            if val:
+                body[flag] = val
+    elif kind == "clear":
+        if args.value:
+            body["name"] = args.value
+
+    out = _post(f"{DEFAULT_URL}/event", body)
+    if not out:
+        return 2
+    print(json.dumps(out))
+    return 0
+
+
+def cmd_assets(args) -> int:
+    """Build drop-in PNG/GIF assets into 16x16 animation manifests, or list them."""
+    from divoom_pet.render import assets as A
+
+    if args.action == "build":
+        src = args.src or str(ROOT / "assets")
+        try:
+            written = A.build_assets(src, A.ASSETS_DIR)
+        except ImportError:
+            print("Pillow (PIL) is required to build assets: pip install Pillow", file=sys.stderr)
+            return 2
+        if not written:
+            print(f"no images found in {src}/ (looked for {', '.join(A.IMAGE_SUFFIXES)})")
+            return 0
+        print(f"built {len(written)} asset(s) into {A.ASSETS_DIR}:")
+        for p in written:
+            print(f"  {p.stem}")
+        print("\nplay one:  clawd notify play <name>")
+        return 0
+
+    # list
+    lib = A.AssetLibrary.from_dir()
+    names = lib.names()
+    print(f"{len(names)} asset(s) in {A.ASSETS_DIR}:")
+    for n in names:
+        print(f"  {n}")
+    return 0
+
+
+def cmd_say(args) -> int:
+    """Speak arbitrary text through Clawd (live voice; warm after first use)."""
+    out = _post(f"{DEFAULT_URL}/say", {"text": args.text})
+    if not out:
+        return 2
+    print(json.dumps(out))
+    return 0
+
+
+def cmd_watch(args) -> int:
+    """Run the GitHub PR/CI watcher, feeding transitions to Clawd's event surface."""
+    from divoom_pet import watch as watcher
+    try:
+        watcher.watch(repo=args.repo, interval=args.interval, url=DEFAULT_URL, once=args.once)
+    except KeyboardInterrupt:
+        print("\nstopped watching.")
+    return 0
+
+
 def cmd_sounds(args) -> int:
     import subprocess
     import time as _t
@@ -262,6 +371,8 @@ def cmd_install_hooks(args) -> int:
         "PostToolUse": "post-tool",
         "Notification": "alert",
         "Stop": "stop",
+        "SubagentStop": "subagent",
+        "SessionStart": "session-start",
     }
 
     for event, verb in HOOK_EVENTS.items():
@@ -279,7 +390,8 @@ def cmd_install_hooks(args) -> int:
 
     settings_path.write_text(json.dumps(existing, indent=2) + "\n")
     print(f"installed hooks into {settings_path}")
-    print("clawd will now react to UserPromptSubmit / PreToolUse / PostToolUse / Notification / Stop.")
+    print("clawd will now react to UserPromptSubmit / PreToolUse / PostToolUse / Notification / Stop")
+    print("  + SubagentStop (agents-home tally) and SessionStart (reset); TodoWrite drives a progress bar.")
     print()
     print("To start the daemon (in another terminal):")
     print(f"  {ROOT}/bin/clawd start --mac <DITOO_LIGHT_MAC>")
@@ -379,6 +491,33 @@ def main(argv=None) -> int:
     p_chirp.add_argument("name", nargs="?", help="chirp name: wake/think/tool/done/error/sleep/poke")
     p_chirp.add_argument("--speak", help="pre-rendered spoken line: hatch/done/error/poke")
     p_chirp.set_defaults(func=cmd_chirp)
+
+    p_notify = sub.add_parser("notify", help="Push live content (progress bar / badge / banner)")
+    p_notify.add_argument("kind", choices=["progress", "badge", "banner", "play", "effect", "clear"])
+    p_notify.add_argument("value", nargs="?",
+                          help="progress 0..1 / badge count / banner text / asset|effect name / overlay to clear")
+    p_notify.add_argument("--clear", action="store_true", help="clear this overlay (progress/badge)")
+    p_notify.add_argument("--color", help="named color or #hex (e.g. green, amber, #d97757)")
+    p_notify.add_argument("--corner", choices=["tl", "tr", "bl", "br"], help="badge corner (default tr)")
+    p_notify.add_argument("--mood", help="optional state to switch to (e.g. happy) with banner/play/effect")
+    p_notify.add_argument("--speak", help="optional pre-rendered line (hatch/done/error/poke)")
+    p_notify.add_argument("--say", help="optional arbitrary spoken text (live voice)")
+    p_notify.set_defaults(func=cmd_notify)
+
+    p_say = sub.add_parser("say", help="Speak arbitrary text through Clawd (live voice)")
+    p_say.add_argument("text", help="what Clawd should say")
+    p_say.set_defaults(func=cmd_say)
+
+    p_assets = sub.add_parser("assets", help="Build drop-in PNG/GIF assets, or list them")
+    p_assets.add_argument("action", nargs="?", default="list", choices=["build", "list"])
+    p_assets.add_argument("--src", help="source dir of PNG/GIF (default: ./assets)")
+    p_assets.set_defaults(func=cmd_assets)
+
+    p_watch = sub.add_parser("watch", help="Watch a GitHub repo's PRs/CI and react (needs gh)")
+    p_watch.add_argument("--repo", help="owner/name (default: the repo in the current dir)")
+    p_watch.add_argument("--interval", type=float, default=30.0, help="poll seconds (default 30)")
+    p_watch.add_argument("--once", action="store_true", help="poll once and exit (seeds baseline)")
+    p_watch.set_defaults(func=cmd_watch)
 
     p_sounds = sub.add_parser("sounds", help="Preview or re-render Clawd's voice")
     p_sounds.add_argument("action", nargs="?", default="preview", choices=["preview", "render"])

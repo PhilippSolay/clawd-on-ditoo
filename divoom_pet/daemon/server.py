@@ -7,6 +7,9 @@ Endpoints (all POST or GET, accept JSON bodies):
   POST /touch                   -> {} (resets idle->sleep timer)
   POST /shutdown                -> {} (stops the daemon cleanly)
   POST /say                     -> {"text": "Hello"} (test the voice)
+  POST /event                   -> live content: progress bars, count badges,
+                                   banner takeovers. See _handle_event for the
+                                   accepted shapes; driven by the `clawd notify` CLI.
 
 Designed to be called from Claude Code hooks via `curl --max-time 0.5 ...`.
 """
@@ -26,6 +29,9 @@ from pathlib import Path
 from typing import List, Optional
 
 from divoom_pet.config import CONFIG_PATH, Config
+from divoom_pet.render import COLORS, CountBadge, ProgressBar, banner, parse_color
+from divoom_pet.render.assets import AssetLibrary
+from divoom_pet.render.effects import EFFECTS
 from divoom_pet.sprites import IdleOpts, State
 
 from .bridge import DitooBridge, find_bundled_bridge
@@ -45,6 +51,7 @@ class PetHandler(BaseHTTPRequestHandler):
     ears: Optional["Ears"] = None
     config: Config = None
     config_path: Path = CONFIG_PATH
+    assets: Optional[AssetLibrary] = None
 
     def log_message(self, fmt: str, *args) -> None:  # quieter logs
         log.debug("http: " + fmt, *args)
@@ -110,6 +117,15 @@ class PetHandler(BaseHTTPRequestHandler):
             if self.sounds and spoken:
                 self.sounds.speak(spoken)
             return self._reply(200, {"ok": True})
+        if self.path == "/say":
+            text = (body.get("text") or "").strip()
+            if not text:
+                return self._reply(400, {"error": "say needs a non-empty 'text'"})
+            if self.sounds:
+                self.sounds.say(text)
+            return self._reply(200, {"ok": True, "text": text})
+        if self.path == "/event":
+            return self._handle_event(body)
         if self.path == "/config":
             try:
                 new_cfg = self.config.merged(body)
@@ -131,6 +147,114 @@ class PetHandler(BaseHTTPRequestHandler):
         import time as _t
         _t.sleep(0.1)
         os.kill(os.getpid(), signal.SIGTERM)
+
+    # ----- live content -----
+
+    def _handle_event(self, body: dict):
+        """Generic ingestion surface. Maps an event dict to overlays / takeovers /
+        voice so any source (git hook, GitHub poller, CI, another session) can feed
+        Clawd. Shapes (all keys optional unless noted):
+
+          {"kind":"progress","value":0.0..1.0,"color":"green"}   persistent bar
+          {"kind":"progress","clear":true}                       remove the bar
+          {"kind":"badge","count":3,"corner":"tr","color":"amber"} corner counter
+          {"kind":"badge","clear":true}                          remove the badge
+          {"kind":"banner","text":"MERGED","color":"green",      one-shot marquee
+              "mood":"happy","speak":"done"}                     (+ optional mood/voice)
+          {"kind":"play","name":"confetti_gif","mood":"happy"}   a built asset by name
+          {"kind":"effect","name":"confetti"}                    a procedural effect
+          {"kind":"agent_done"}                                  tick the agent tally
+          {"kind":"agents_reset"}                                zero the tally + badge
+          {"kind":"clear","name":"progress"}                     clear one / all
+        """
+        kind = (body.get("kind") or "").lower()
+        c = self.controller
+
+        if kind == "progress":
+            if body.get("clear"):
+                c.clear_overlay("progress")
+                return self._reply(200, {"ok": True, "cleared": "progress"})
+            try:
+                value = float(body.get("value", 0.0))
+            except (TypeError, ValueError):
+                return self._reply(400, {"error": "progress needs a numeric 'value' (0..1)"})
+            fg = parse_color(body.get("color"), COLORS["green"])
+            c.set_overlay("progress", ProgressBar(value=value, fg=fg))
+            return self._reply(200, {"ok": True, "kind": "progress", "value": value})
+
+        if kind == "badge":
+            if body.get("clear"):
+                c.clear_overlay("badge")
+                return self._reply(200, {"ok": True, "cleared": "badge"})
+            try:
+                count = int(body.get("count", 0))
+            except (TypeError, ValueError):
+                return self._reply(400, {"error": "badge needs an integer 'count'"})
+            color = parse_color(body.get("color"), COLORS["yellow"])
+            corner = str(body.get("corner", "tr"))
+            c.set_overlay("badge", CountBadge(count=count, corner=corner, color=color))
+            return self._reply(200, {"ok": True, "kind": "badge", "count": count})
+
+        if kind == "banner":
+            text = str(body.get("text", ""))[:64]
+            color = parse_color(body.get("color"), COLORS["orange"])
+            c.play_takeover(banner(text, color=color))
+            self._mood_and_speak(body)
+            return self._reply(200, {"ok": True, "kind": "banner", "text": text})
+
+        if kind == "play":
+            name = str(body.get("name", ""))
+            anim = self.assets.get(name) if self.assets else None
+            if not anim:
+                available = self.assets.names() if self.assets else []
+                return self._reply(404, {"error": f"no asset named {name!r}",
+                                         "available": available})
+            c.play_takeover(anim)
+            self._mood_and_speak(body)
+            return self._reply(200, {"ok": True, "kind": "play", "name": name,
+                                     "frames": len(anim)})
+
+        if kind == "effect":
+            name = (body.get("name") or "").lower()
+            generator = EFFECTS.get(name)
+            if not generator:
+                return self._reply(404, {"error": f"unknown effect {name!r}",
+                                         "available": sorted(EFFECTS)})
+            c.play_takeover(generator())
+            self._mood_and_speak(body)
+            return self._reply(200, {"ok": True, "kind": "effect", "name": name})
+
+        if kind == "agent_done":
+            count = c.agent_came_home()
+            return self._reply(200, {"ok": True, "kind": "agent_done", "count": count})
+
+        if kind == "agents_reset":
+            c.reset_agents()
+            return self._reply(200, {"ok": True, "kind": "agents_reset"})
+
+        if kind == "clear":
+            name = body.get("name")
+            c.clear_overlay(name)  # None clears all overlays
+            return self._reply(200, {"ok": True, "cleared": name or "all"})
+
+        return self._reply(400, {"error": f"unknown event kind: {kind!r}"})
+
+    def _mood_and_speak(self, body: dict) -> None:
+        """Optional extras attached to an event: `mood` (state switch), `speak` (a
+        named pre-rendered line), and `say` (arbitrary live-voice text)."""
+        mood = body.get("mood")
+        if mood:
+            try:
+                self.controller.set_state(State(str(mood).lower()), note="event")
+            except ValueError:
+                pass
+        if self.sounds:
+            spoken = body.get("speak")
+            if spoken:
+                self.sounds.speak(str(spoken))
+            say_text = body.get("say")
+            if say_text:
+                self.sounds.say(str(say_text))
 
 
 # ---------- live config application ----------
@@ -289,6 +413,9 @@ def main(argv=None) -> int:
     PetHandler.ears = ears
     PetHandler.config = cfg
     PetHandler.config_path = config_path
+    PetHandler.assets = AssetLibrary.from_dir()
+    log.info("asset library: %d animation(s) %s", len(PetHandler.assets.names()),
+             PetHandler.assets.names())
 
     controller.start(initial_state=State.HATCH)
     if ears:
