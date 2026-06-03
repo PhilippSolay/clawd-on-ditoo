@@ -26,6 +26,7 @@ MOOD_TO_SESSION = {
     "thinking": SESSION_RUNNING,
     "typing": SESSION_RUNNING,
     "tool_use": SESSION_RUNNING,
+    "coding": SESSION_RUNNING,
     "poke": SESSION_RUNNING,
     "happy": SESSION_FINISHED,
     "alert": SESSION_NEEDS_INPUT,

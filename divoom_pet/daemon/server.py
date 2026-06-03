@@ -30,11 +30,12 @@ from pathlib import Path
 from typing import List, Optional
 
 from divoom_pet.config import CONFIG_PATH, Config
-from divoom_pet.render import COLORS, CountBadge, ProgressBar, SessionBar, banner, parse_color
+from divoom_pet.render import COLORS, CountBadge, ProgressBar, SessionBar, banner, compose, parse_color
 from divoom_pet.render.assets import AssetLibrary
 from divoom_pet.render.clock import clock_takeover
 from divoom_pet.render.effects import EFFECTS
 from divoom_pet.sprites import IdleOpts, State
+from divoom_pet.sprites.coding import SCENES as CODING_SCENES
 
 from .sessions import VALID_STATES, SessionRegistry, session_state_for_mood
 
@@ -252,9 +253,12 @@ class PetHandler(BaseHTTPRequestHandler):
         if kind == "play":
             name = str(body.get("name", ""))
             anim = self.assets.get(name) if self.assets else None
+            if anim is None and name in CODING_SCENES:
+                # In-code coding scene → compose its sprites; loop a few times for a one-shot.
+                anim = [(compose(sprite), ms) for sprite, ms in CODING_SCENES[name]] * 3
             if not anim:
-                available = self.assets.names() if self.assets else []
-                return self._reply(404, {"error": f"no asset named {name!r}",
+                available = (self.assets.names() if self.assets else []) + list(CODING_SCENES)
+                return self._reply(404, {"error": f"no asset/scene named {name!r}",
                                          "available": available})
             c.play_takeover(anim)
             self._mood_and_speak(body)

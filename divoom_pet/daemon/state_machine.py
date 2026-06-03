@@ -32,6 +32,7 @@ AUTO_TIMEOUTS = {
     State.TOOL_USE: (4.0, State.IDLE),
     State.TYPING: (8.0, State.IDLE),
     State.THINKING: (60.0, State.IDLE),  # safety net
+    State.CODING: (60.0, State.IDLE),    # safety net; refreshed while actively coding
     State.POKE: (1.6, State.IDLE),
 }
 

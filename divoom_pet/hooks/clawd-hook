@@ -101,16 +101,18 @@ session_id=$(json_field session_id)
 
 case "$action" in
     prompt)
-        post_state thinking
+        # Active "working" look: Clawd at his laptop (the coding scene).
+        post_state coding
         ;;
     pre-tool)
+        # Keep the gear animation for actual tool calls.
         tool=$(json_field tool_name)
         post_state tool_use "${tool:-tool}"
         ;;
     post-tool)
-        # Quick beat back to thinking; daemon auto-falls to idle after timeout
+        # Back to the coding scene between tools; daemon auto-falls to idle on timeout.
         tool=$(json_field tool_name)
-        post_state thinking "$tool"
+        post_state coding "$tool"
         # TodoWrite drives a live progress bar from the todo list.
         [ "$tool" = "TodoWrite" ] && post_todo_progress
         ;;

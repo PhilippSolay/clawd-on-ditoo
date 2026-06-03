@@ -599,6 +599,7 @@ class State(str, enum.Enum):
     SLEEPING = "sleeping"
     HATCH = "hatch"
     POKE = "poke"
+    CODING = "coding"
 
 
 SPRITES: Dict[str, Sprite] = {
@@ -750,6 +751,10 @@ def animation_for_state(state: State, idle: IdleOpts = DEFAULT_IDLE) -> List[Tup
             (SPRITES["happy_a"], 520),
             (SPRITES["happy_b"], 420),
         ]
+    if state == State.CODING:
+        # Clawd at his laptop. Lazy import avoids a sprites import cycle.
+        from divoom_pet.sprites.coding import DEFAULT_CODING_SCENE, SCENES
+        return SCENES[DEFAULT_CODING_SCENE]
     raise ValueError(f"Unknown state: {state}")
 
 

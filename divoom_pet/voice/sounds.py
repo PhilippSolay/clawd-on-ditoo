@@ -594,6 +594,7 @@ class KeepAlive:
 STATE_CHIRP = {
     "hatch": "wake",
     "thinking": "think",
+    "coding": "think",    # same gentle pondering chirp as thinking
     "typing": None,       # silent — typing is continuous
     "tool_use": "tool",
     "happy": "done",

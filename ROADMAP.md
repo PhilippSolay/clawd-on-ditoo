@@ -107,6 +107,14 @@ Rides entirely on Phase 1.
 - **Hands-free:** launchd watcher template + git hooks; the menu-bar app already
   owns login autostart.
 
+### Coding scenes — ✅ **done**
+- Hand-authored crab-with-laptop animations (`sprites/coding.py`): `laptop` (typing
+  code), `terminal` (cursor), `compile` (Anthropic asterisk). A looping `coding`
+  State (defaults to the compile scene) + on-demand `clawd notify play <scene>`.
+- Hooks wire it "auto but keep the gear": prompt/post-tool → `coding`,
+  pre-tool stays `tool_use`. So Clawd sits at his laptop while you work, and shows
+  the gear during actual tool calls.
+
 ### Multi-session fleet bar — ✅ **done**
 - One daemon serves all sessions, so a bottom strip of dots shows each session's
   state (running / needs-input / finished / idle), keyed by `session_id` with TTL

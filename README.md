@@ -126,7 +126,7 @@ clawd doctor                           "is the crab okay??"
 clawd install-hooks                    wire into Claude Code
 ```
 
-States: `idle thinking typing tool_use happy alert sleeping hatch poke`.
+States: `idle thinking typing tool_use happy alert sleeping hatch poke coding`.
 
 ## Live content: Clawd shows you what's happening 📊
 
@@ -164,6 +164,8 @@ clawd notify effect confetti     # procedural, "live-created" from math, no art 
                                  #   confetti fireworks plasma pulse
                                  #   starfield matrix spinner rainbow
 clawd notify clock               # show the time (HH stacked over MM)
+clawd notify play laptop         # coding scenes: laptop / terminal / compile
+                                 #   (the crab peeking over a laptop, claws tapping)
 
 cp my_cute_loop.gif assets/      # drop-in: any PNG/GIF
 clawd assets build               # → downscaled to 16×16, palette-snapped, named
