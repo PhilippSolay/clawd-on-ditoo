@@ -124,7 +124,117 @@ DEMO_SEQUENCE = [
 ]
 
 
+def _run_demo_show() -> int:
+    """Guided presentation: one act per keypress, narration printed as a
+    teleprompter, each act's cues fired straight at the daemon. See DEMO.md."""
+    url = DEFAULT_URL
+    if not _get(f"{url}/healthz"):
+        print("daemon not running — Start Clawd first (or: clawd start --simulate)")
+        return 2
+
+    def st(s):       _post(f"{url}/state", {"state": s}, timeout=2)
+    def ev(body):    _post(f"{url}/event", body, timeout=2)
+    def say(t):      _post(f"{url}/say", {"text": t}, timeout=2)
+    def ses(i, s):   _post(f"{url}/session", {"session_id": i, "status": s}, timeout=2)
+    def cfg(sec, k, v): _post(f"{url}/config", {sec: {k: v}}, timeout=3)
+
+    def coding_fallback():
+        st("coding"); time.sleep(1.5)
+        ev({"kind": "progress", "value": 0.3}); st("tool_use"); time.sleep(1.2)
+        st("coding"); ev({"kind": "progress", "value": 0.7}); time.sleep(1.2)
+        ev({"kind": "progress", "value": 1.0}); st("happy")
+        time.sleep(0.6); ev({"kind": "progress", "clear": True})
+
+    def act3_fleet():
+        ses("web", "running"); ses("api", "running"); ses("infra", "finished")
+        time.sleep(2.5)
+        ses("web", "needs_input"); say("web needs your input")
+
+    def act4_ship():
+        ev({"kind": "banner", "text": "MERGED", "color": "green",
+            "mood": "happy", "say": "Pull request merged!"})
+        ev({"kind": "effect", "name": "confetti"})
+
+    def act5_platform():
+        ev({"kind": "effect", "name": "fireworks"}); time.sleep(2.5)
+        cfg("sounds", "theme", "music_box"); time.sleep(0.5)
+        ev({"kind": "play", "name": "laptop"}); time.sleep(2.0)
+        ev({"kind": "clock"})
+
+    def reset():
+        ev({"kind": "clear"}); st("idle")
+
+    acts = [
+        ("Meet Clawd", "\"This is Clawd — he lives on a $40 retro speaker and reacts\n"
+         "   to your code in real time. Clap once to poke him, twice to nap him.\"",
+         "Let him idle. CLAP once (heart), then twice (sleep).", lambda: st("hatch")),
+        ("He IS your coding session  [LIVE]",
+         "\"Everything you'll see is Claude Code hooks -> a 16x16 display, live.\n"
+         "   He types when Claude types, gear on every tool, the bar is his todo list.\"",
+         "Run your real task in terminal B now.  Press [f] for the scripted fallback.", None),
+        ("The fleet",
+         "\"You don't run one session, you run five. One daemon serves them all -\n"
+         "   amber working, green done, red needs you - and it says which one.\"",
+         None, act3_fleet),
+        ("Ship it",
+         "\"When a session ships: confetti, and he says it out loud.\"",
+         None, act4_ship),
+        ("It's a platform, not a toy",
+         "\"All one endpoint - `clawd notify`. Any agent, CI, or git hook drives him.\n"
+         "   fireworks ... swap his whole voice live ... a drop-in animation ... a clock.\"",
+         None, act5_platform),
+        ("Architecture: mood vs content",
+         "compositor.py - compose(base, overlays). Mood = state machine; content =\n"
+         "   ProgressBar/CountBadge/SessionBar overlays flattened to one frame.",
+         "Open render/compositor.py.", lambda: ev({"kind": "progress", "value": 0.5})),
+        ("Architecture: the event surface",
+         "server.py _handle_event + hooks/clawd-hook. Claude fires a hook -> curl\n"
+         "   localhost:7878 -> one generic /event. Fire-and-forget, never blocks Claude.",
+         "Open hooks/clawd-hook.", lambda: ev({"kind": "banner", "text": "HELLO DEVS", "color": "amber"})),
+        ("Architecture: multi-session + the Bluetooth catch",
+         "sessions.py - one daemon, keyed by session_id. And the catch: Ditoo is\n"
+         "   Bluetooth-only; pixel control rides RFCOMM channel 2. Measurement-first (FINDINGS.md).",
+         "Open sessions.py / FINDINGS.md.", lambda: ses("demo", "running")),
+        ("Close",
+         "\"He blinks, he ships, he judges your code, and he's open source.\"",
+         None, lambda: ev({"kind": "effect", "name": "confetti"})),
+    ]
+
+    print("\n" + "=" * 64)
+    print("  🦀  CLAWD DEMO — guided show")
+    print("  [Enter] fire this act's cue + advance   [f] Act-2 fallback")
+    print("  [r] re-fire last cue   [q] quit + reset")
+    print("=" * 64)
+    last = None
+    for idx, (title, narration, stage, run) in enumerate(acts, 1):
+        print(f"\n──[ {idx}/{len(acts)} ]── {title} " + "─" * max(2, 40 - len(title)))
+        print(f"   {narration}")
+        if stage:
+            print(f"   ▸ {stage}")
+        while True:
+            try:
+                choice = input("   > ").strip().lower()
+            except (EOFError, KeyboardInterrupt):
+                reset(); print("\n   demo ended, reset to idle.")
+                return 0
+            if choice == "q":
+                reset(); print("   demo ended, reset to idle.")
+                return 0
+            if choice == "f":
+                coding_fallback(); continue
+            if choice == "r":
+                (last or (lambda: None))(); continue
+            if run:
+                run(); last = run
+            break
+    reset()
+    print("\n  🦀  demo complete — reset to idle.\n")
+    return 0
+
+
 def cmd_demo(args) -> int:
+    if getattr(args, "show", False):
+        return _run_demo_show()
     out = _get(f"{DEFAULT_URL}/healthz")
     if not out:
         print("daemon not running. start it first: clawd start --simulate (or with --mac)")
@@ -528,7 +638,9 @@ def main(argv=None) -> int:
     p_state.add_argument("--note", help="optional note string")
     p_state.set_defaults(func=cmd_state)
 
-    p_demo = sub.add_parser("demo", help="Cycle through all states with TTS")
+    p_demo = sub.add_parser("demo", help="Cycle through states, or --show for the guided presentation")
+    p_demo.add_argument("--show", action="store_true",
+                        help="Guided demo: one act per keypress with narration (see DEMO.md)")
     p_demo.set_defaults(func=cmd_demo)
 
     p_poke = sub.add_parser("poke", help="Poke Clawd (startle + delight reaction)")
