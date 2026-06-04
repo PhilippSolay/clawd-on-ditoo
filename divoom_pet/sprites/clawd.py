@@ -718,9 +718,10 @@ def animation_for_state(state: State, idle: IdleOpts = DEFAULT_IDLE) -> List[Tup
             (SPRITES["typing_down"], 160),
         ]
     if state == State.TOOL_USE:
-        # Stay on the laptop (gear on screen) so coding<->tool doesn't jump poses.
-        from divoom_pet.sprites.coding import SCENES
-        return SCENES["tooling"]
+        # Same front-facing crab body as the coding scene, gear on screen — so
+        # coding<->tool only swaps the screen icon, never the whole crab.
+        from divoom_pet.sprites.coding import DEFAULT_TOOL_SCENE, SCENES
+        return SCENES[DEFAULT_TOOL_SCENE]
     if state == State.HAPPY:
         return [
             (SPRITES["happy_a"], 380),

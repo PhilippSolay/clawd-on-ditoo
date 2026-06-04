@@ -190,9 +190,49 @@ LAPTOP_TOOL_B = _canvas([
 ])
 
 
+# ---------- front-facing crab at the keyboard (the default coding look) ----------
+# Big cute eyes facing forward, shell, and a laptop below he's typing on. The
+# `crab_type_*` (green code) and `crab_tool_*` (yellow gear) frames share an
+# IDENTICAL body — only the screen content changes — so coding<->tool swaps just
+# the screen icon, never the whole crab.
+
+_CRAB_TOP = [
+    "...oo....oo.....",   # eyestalk tops
+    "..owwo..owwo....",   # eye whites
+    "..okwo..okwo....",   # pupils (forward) + highlight
+    "..ooooooooooo...",   # shell top
+    "oooooohoooooooo.",   # shell + cream highlight
+    "oooooooooooooooo",   # shell
+    "oodddoooodddoooo",   # shell shadow
+    ".oo........oo...",   # arms emerge from the shell sides
+    ".o.LLLLLLLLL.o..",   # laptop lid (arms at cols 1 / 13)
+]
+_CRAB_BOT = [
+    ".ooGGGGGGGGGGo..",   # keyboard + claws on the keys
+    "...GGGGGGGGGGG..",   # keyboard front edge
+    "................",
+    "................",
+    "................",
+]
+
+
+def _crab(row9: str, row10: str):
+    return _canvas(_CRAB_TOP + [row9, row10] + _CRAB_BOT)
+
+
+CRAB_TYPE_A = _crab(".o.SEEE.EE.S.o..", ".o.SE.EE.EES.o..")   # typing — code
+CRAB_TYPE_B = _crab(".o.SEE.EEE.S.o..", ".o.SEE.E.EES.o..")   # code shifted
+CRAB_TOOL_A = _crab(".o.SaaaaaaaS.o..", ".o.Sa.aaa.aS.o..")   # tool — gear
+CRAB_TOOL_B = _crab(".o.Saa.a.aaS.o..", ".o.SaaaaaaaS.o..")   # gear pulse
+
+
 # ---------- registry ----------
 
 CODING_SPRITES: Dict[str, Sprite] = {
+    "crab_type_a": Sprite("crab_type_a", CRAB_TYPE_A),
+    "crab_type_b": Sprite("crab_type_b", CRAB_TYPE_B),
+    "crab_tool_a": Sprite("crab_tool_a", CRAB_TOOL_A),
+    "crab_tool_b": Sprite("crab_tool_b", CRAB_TOOL_B),
     "laptop_tool_a": Sprite("laptop_tool_a", LAPTOP_TOOL_A),
     "laptop_tool_b": Sprite("laptop_tool_b", LAPTOP_TOOL_B),
     "laptop_a": Sprite("laptop_a", LAPTOP_A),
@@ -205,12 +245,17 @@ CODING_SPRITES: Dict[str, Sprite] = {
 
 # Named coding animations: name -> list of (Sprite, duration_ms).
 SCENES: Dict[str, List[Tuple[Sprite, int]]] = {
+    # Front-facing crab at the keyboard (the default look).
+    "crabtype": [(CODING_SPRITES["crab_type_a"], 240), (CODING_SPRITES["crab_type_b"], 240)],
+    # Tool call: same crab body as `crabtype`, gear pulsing on screen.
+    "crabtool": [(CODING_SPRITES["crab_tool_a"], 280), (CODING_SPRITES["crab_tool_b"], 280)],
+    # The earlier "peeking over the laptop" scenes, kept as playable options.
     "laptop": [(CODING_SPRITES["laptop_a"], 240), (CODING_SPRITES["laptop_b"], 240)],
     "terminal": [(CODING_SPRITES["term_a"], 520), (CODING_SPRITES["term_b"], 520)],
     "compile": [(CODING_SPRITES["compile_a"], 300), (CODING_SPRITES["compile_b"], 300)],
-    # Tool call: same laptop body as `compile`, gear pulsing on screen.
     "tooling": [(CODING_SPRITES["laptop_tool_a"], 280), (CODING_SPRITES["laptop_tool_b"], 280)],
 }
 
-# Which scene the looping `coding` state shows.
-DEFAULT_CODING_SCENE = "compile"
+# Which scene the looping `coding` state shows, and which the tool_use state uses.
+DEFAULT_CODING_SCENE = "crabtype"
+DEFAULT_TOOL_SCENE = "crabtool"

@@ -28,16 +28,31 @@ class SceneTests(unittest.TestCase):
                 self.assertGreater(ms, 0)
 
     def test_known_scene_names(self):
-        self.assertEqual(set(SCENES), {"laptop", "terminal", "compile", "tooling"})
+        self.assertEqual(
+            set(SCENES),
+            {"crabtype", "crabtool", "laptop", "terminal", "compile", "tooling"},
+        )
 
     def test_tool_scene_shares_laptop_body_with_compile(self):
-        # Rows 0-4 and 9-12 must match the compile scene exactly so coding<->tool
-        # only changes the screen icon (no jarring pose jump).
+        # The legacy peeking scenes: rows 0-4 and 9-12 match so coding<->tool only
+        # changes the screen icon (no jarring pose jump).
         from divoom_pet.sprites.coding import CODING_SPRITES
         compile_rows = CODING_SPRITES["compile_a"].rows
         tool_rows = CODING_SPRITES["laptop_tool_a"].rows
         for i in list(range(0, 5)) + list(range(9, 13)):
             self.assertEqual(tool_rows[i], compile_rows[i], f"row {i} differs")
+
+    def test_crab_type_and_tool_share_body(self):
+        # The default front-facing pair must share everything but the 2 screen rows
+        # (9, 10), so coding<->tool only swaps code<->gear on the screen.
+        from divoom_pet.sprites.coding import CODING_SPRITES
+        type_rows = CODING_SPRITES["crab_type_a"].rows
+        tool_rows = CODING_SPRITES["crab_tool_a"].rows
+        for i in range(16):
+            if i in (9, 10):
+                self.assertNotEqual(tool_rows[i], type_rows[i], f"screen row {i} should differ")
+            else:
+                self.assertEqual(tool_rows[i], type_rows[i], f"body row {i} should match")
 
     def test_coding_state_returns_default_scene(self):
         from divoom_pet.sprites.coding import DEFAULT_CODING_SCENE
