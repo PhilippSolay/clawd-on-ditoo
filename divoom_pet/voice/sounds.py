@@ -638,11 +638,12 @@ STATE_CHIRP = {
     "poke": "poke",
 }
 
-# Which states also get a spoken line. Kept minimal: a hello when he wakes and a
-# word when something's wrong. Everything else is chirps only.
+# Which states also get a *fixed* spoken line. Kept minimal: just a hello when he
+# wakes. Alert keeps its error chirp as an attention ping, but the spoken line is
+# left to the live-voice layer (e.g. the hook's "<project> needs your input", or
+# the watcher's "Tests are failing.") so they don't talk over each other.
 STATE_SPEAK = {
     "hatch": "hatch",
-    "alert": "error",
 }
 
 
