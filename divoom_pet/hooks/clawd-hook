@@ -57,6 +57,24 @@ post_event() {
         -d "$1" "$DAEMON_URL/event" >/dev/null 2>&1 || true
 }
 
+# Speak arbitrary text aloud (live voice, routed to the Ditoo speaker).
+say_text() {
+    local body
+    body=$(TEXT="$1" python3 -c 'import json, os; print(json.dumps({"text": os.environ.get("TEXT", "")}))' 2>/dev/null)
+    [ -z "$body" ] && return
+    curl -s --max-time "$TIMEOUT" -XPOST -H 'Content-Type: application/json' \
+        -d "$body" "$DAEMON_URL/say" >/dev/null 2>&1 || true
+}
+
+# A speakable name for this session's project: basename of the cwd, with
+# underscores/dashes turned into spaces (e.g. "cosmic-guide" -> "cosmic guide").
+project_name() {
+    local dir
+    dir=$(json_field cwd)
+    [ -z "$dir" ] && dir="$PWD"
+    basename "$dir" | tr '_-' '  '
+}
+
 # Derive a progress bar from a TodoWrite payload: completed / total todos.
 post_todo_progress() {
     [ -z "$stdin_json" ] && return
@@ -117,9 +135,20 @@ case "$action" in
         post_state coding "$tool"
         # TodoWrite drives a live progress bar from the todo list.
         [ "$tool" = "TodoWrite" ] && post_todo_progress
+        # Announce when this session opens a pull request.
+        if [ "$tool" = "Bash" ]; then
+            case "$(json_field command)" in
+                *"gh pr create"*)
+                    say_text "$(project_name) opened a pull request"
+                    post_event '{"kind":"effect","name":"confetti"}'
+                    ;;
+            esac
+        fi
         ;;
     alert)
+        # A session wants your attention (permission prompt / waiting on input).
         post_state alert "$(json_field message)"
+        say_text "$(project_name) needs your input"
         ;;
     stop)
         post_state happy "done"
