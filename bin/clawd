@@ -1,5 +1,13 @@
 #!/bin/bash
 # Thin shim — invoke the clawd CLI module with the local source tree on PYTHONPATH.
-HERE=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
+# Resolves symlinks so this works when `clawd` is linked onto PATH (e.g. in
+# /opt/homebrew/bin) and run from any directory.
+SOURCE="${BASH_SOURCE[0]}"
+while [ -h "$SOURCE" ]; do
+  DIR=$(cd -P "$(dirname "$SOURCE")" && pwd)
+  SOURCE=$(readlink "$SOURCE")
+  [[ $SOURCE != /* ]] && SOURCE="$DIR/$SOURCE"
+done
+HERE=$(cd -P "$(dirname "$SOURCE")/.." && pwd)
 export PYTHONPATH="$HERE${PYTHONPATH:+:$PYTHONPATH}"
 exec python3 -m divoom_pet.cli "$@"
