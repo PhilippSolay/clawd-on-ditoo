@@ -201,10 +201,16 @@ final class ClawdController: ObservableObject {
               let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
             running = false; bridgeAlive = false; state = "—"; return
         }
+        let justConnected = !running
         running = true
         bridgeAlive = (obj["bridge_alive"] as? Bool) ?? false
         state = (obj["state"] as? String) ?? "—"
-        if let cfgData = try? await get("/config"),
+        // Pull config FROM the daemon only on first connect. Doing it on every 2s
+        // poll would overwrite the user's in-progress edits in Settings — they'd
+        // "snap back" before Apply. After connect, local edits + Apply are the
+        // source of truth.
+        if justConnected,
+           let cfgData = try? await get("/config"),
            let cfg = try? ClawdConfig.decoder().decode(ClawdConfig.self, from: cfgData) {
             config = cfg
         }
