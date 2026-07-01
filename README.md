@@ -84,7 +84,9 @@ Replace `AA:BB:CC:DD:EE:FF` with *your* MAC. We're not putting ours on the inter
 
 - 👏 **clap once** → poke him (startle + heart + bip)
 - 👏👏 **clap twice fast** → tuck him in / wake him up
-- 🚶 **wander off ~4 min** → he yawns and naps
+- 🚶 **wander off ~1 min** → he gets restless and finds something to do: a workout (jump rope, push-ups, dumbbell press, jumping jacks, shadowboxing 🥊) or a wind-down (meditation, a cup of tea 🍵, some yoga). He rolls the dice each time.
+- 😴 **…and ~5 min** → he's had enough, yawns and naps
+- ⌨️ **while you're coding** → he works too, drifting between looks: at the keyboard, at a whiteboard, rubber-duck debugging 🦆, or nose-in-the-docs
 
 ## Settings: he's high-maintenance (lovingly)
 
@@ -96,8 +98,11 @@ Change them three ways: the **Settings window** in the menu-bar app, by hand, or
 clawd config                                    # show everything
 clawd config set animations.brightness 40       # dim the mood lighting
 clawd config set voice.babble false             # tell him to stop muttering
+clawd config set sleep.idle_to_bored_seconds 30   # start his workout sooner
 clawd config set sleep.idle_to_sleep_seconds 600  # night owl mode
 ```
+
+Want to see a specific bit on demand? `clawd notify play jumprope` (also `pushups`, `weights`, `jumpingjacks`, `boxing`, `meditate`, `tea`, `yoga`) or a working look like `clawd notify play rubberduck` (also `whiteboard`, `reading`).
 
 A few settings (`device.mac`, `device.channel`, `sounds.audio_device`) need a restart — the CLI will tell you which.
 

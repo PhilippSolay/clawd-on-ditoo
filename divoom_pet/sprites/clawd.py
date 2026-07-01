@@ -600,6 +600,7 @@ class State(str, enum.Enum):
     HATCH = "hatch"
     POKE = "poke"
     CODING = "coding"
+    SPORTY = "sporty"
 
 
 SPRITES: Dict[str, Sprite] = {
@@ -661,6 +662,11 @@ DEFAULT_IDLE = IdleOpts()
 # Base per-cycle probability of each fidget (before the frequency multiplier).
 _FIDGET_BASE = {"look": 0.10, "wave": 0.06, "bubble": 0.04, "stretch": 0.02}
 
+# Base per-cycle chance to mix a quick "special" activity (a couple of jumping
+# jacks, a sip of tea…) into an otherwise-standard idle cycle. Scaled by the same
+# fidget frequency, so fidget_frequency=0 turns it off with everything else.
+_IDLE_SPECIAL_BASE = 0.12
+
 
 def _idle_loop(idle: IdleOpts = DEFAULT_IDLE) -> List[Tuple[Sprite, int]]:
     """One randomized idle cycle. Called fresh each loop by the state machine, so
@@ -699,6 +705,12 @@ def _idle_loop(idle: IdleOpts = DEFAULT_IDLE) -> List[Tuple[Sprite, int]]:
                 (SPRITES["bubble_pop"], 200), (SPRITES["idle_open"], 220)]
     elif r < stretch:     # big stretch
         seq += [(SPRITES["stretch"], 720), (SPRITES["idle_open"], 320)]
+
+    # …and once in a while, after the standard idle beats, a quick special activity
+    # peeks in (independent of the fidget above), then next cycle it's back to calm.
+    if idle.fidgets and random.random() < _IDLE_SPECIAL_BASE * idle.frequency:
+        from divoom_pet.sprites.sports import quick_activity
+        seq += quick_activity()
     return seq
 
 
@@ -752,9 +764,15 @@ def animation_for_state(state: State, idle: IdleOpts = DEFAULT_IDLE) -> List[Tup
             (SPRITES["happy_b"], 420),
         ]
     if state == State.CODING:
-        # Clawd at his laptop. Lazy import avoids a sprites import cycle.
-        from divoom_pet.sprites.coding import DEFAULT_CODING_SCENE, SCENES
-        return SCENES[DEFAULT_CODING_SCENE]
+        # Clawd working — mostly at the keyboard, occasionally mixing in a special
+        # look (whiteboard, rubber duck, docs). Lazy import avoids a cycle.
+        from divoom_pet.sprites.coding import coding_loop
+        return coding_loop()
+    if state == State.SPORTY:
+        # Bored and restless: hit the gym. A fresh random exercise each loop, so a
+        # bored Clawd does a set of one, then rolls into another. Lazy import.
+        from divoom_pet.sprites.sports import random_sport
+        return random_sport()
     raise ValueError(f"Unknown state: {state}")
 
 

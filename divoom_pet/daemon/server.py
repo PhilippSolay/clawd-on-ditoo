@@ -36,6 +36,10 @@ from divoom_pet.render.clock import clock_takeover
 from divoom_pet.render.effects import EFFECTS
 from divoom_pet.sprites import IdleOpts, State
 from divoom_pet.sprites.coding import SCENES as CODING_SCENES
+from divoom_pet.sprites.sports import SCENES as SPORT_SCENES
+
+# In-code scenes playable by name via `notify play` (asset library wins on a clash).
+NAMED_SCENES = {**CODING_SCENES, **SPORT_SCENES}
 
 from .sessions import VALID_STATES, SessionRegistry, session_state_for_mood
 
@@ -258,11 +262,11 @@ class PetHandler(BaseHTTPRequestHandler):
         if kind == "play":
             name = str(body.get("name", ""))
             anim = self.assets.get(name) if self.assets else None
-            if anim is None and name in CODING_SCENES:
-                # In-code coding scene → compose its sprites; loop a few times for a one-shot.
-                anim = [(compose(sprite), ms) for sprite, ms in CODING_SCENES[name]] * 3
+            if anim is None and name in NAMED_SCENES:
+                # In-code scene → compose its sprites; loop a few times for a one-shot.
+                anim = [(compose(sprite), ms) for sprite, ms in NAMED_SCENES[name]] * 3
             if not anim:
-                available = (self.assets.names() if self.assets else []) + list(CODING_SCENES)
+                available = (self.assets.names() if self.assets else []) + list(NAMED_SCENES)
                 return self._reply(404, {"error": f"no asset/scene named {name!r}",
                                          "available": available})
             c.play_takeover(anim)
@@ -340,6 +344,7 @@ def apply_config(new: Config, old: Config, controller: PetController,
     # animations + sleep — all live
     if new.animations.brightness != old.animations.brightness:
         controller.set_brightness(new.animations.brightness)
+    controller.idle_to_bored = new.sleep.idle_to_bored_seconds
     controller.idle_to_sleep = new.sleep.idle_to_sleep_seconds
     controller.idle_opts = _idle_opts_from(new)
 
@@ -455,6 +460,7 @@ def main(argv=None) -> int:
     controller = PetController(
         bridge=bridge, sounds=sounds,
         brightness=cfg.animations.brightness,
+        idle_to_bored=cfg.sleep.idle_to_bored_seconds,
         idle_to_sleep=cfg.sleep.idle_to_sleep_seconds,
         idle_opts=_idle_opts_from(cfg),
     )
