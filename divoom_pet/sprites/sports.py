@@ -14,10 +14,10 @@ few times so a single loop reads as a short beat before he switches activity.
 
 from __future__ import annotations
 
-import random
 from typing import Dict, List, Tuple
 
 from .clawd import CLAWD_PALETTE, Sprite, _canvas
+from .rotation import ShuffleBag
 
 # Sports palette (uppercase keys so they never collide with Clawd's lowercase set).
 CLAWD_PALETTE["R"] = (232, 208, 150)   # jump-rope cord (warm sisal)
@@ -430,10 +430,16 @@ SPORT_ORDER = ["jumprope", "pushups", "weights", "jumpingjacks", "boxing",
                "meditate", "tea", "yoga"]
 
 
+# One shuffle-bag shared by the SPORTY state and the idle peeks, so the activities
+# rotate through the full set in a fresh random order with no back-to-back repeats
+# (a plain random pick clumps — see rotation.py).
+_ACTIVITY_BAG = ShuffleBag(SPORT_ORDER)
+
+
 def random_sport() -> List[Tuple[Sprite, int]]:
-    """Pick one activity at random — the SPORTY state calls this fresh each loop, so
-    a bored Clawd does one thing (a workout or a wind-down), then rolls into another."""
-    return SCENES[random.choice(SPORT_ORDER)]
+    """Pick the next activity — the SPORTY state calls this fresh each loop, so a
+    bored Clawd rotates through his workouts and wind-downs in random order."""
+    return SCENES[_ACTIVITY_BAG.draw()]
 
 
 # How long a quick idle "peek" of an activity should last (see quick_activity).
@@ -441,10 +447,10 @@ _QUICK_TASTE_MS = 1600
 
 
 def quick_activity() -> List[Tuple[Sprite, int]]:
-    """A brief taste of one activity — a couple of jumping jacks, a sip of tea — sized
-    to ~1.6s, for mixing into the *normal* idle loop. It's the amuse-bouche; the full
-    SPORTY state (after a minute idle) is the whole meal."""
-    scene = SCENES[random.choice(SPORT_ORDER)]
+    """A brief taste of the next activity — a couple of jumping jacks, a sip of tea —
+    sized to ~1.6s, for mixing into the *normal* idle loop. It's the amuse-bouche;
+    the full SPORTY state (after a minute idle) is the whole meal."""
+    scene = SCENES[_ACTIVITY_BAG.draw()]
     rep = scene[:2]                                  # one rep = the two base frames
     beat = sum(ms for _, ms in rep) or 1
     reps = max(1, round(_QUICK_TASTE_MS / beat))

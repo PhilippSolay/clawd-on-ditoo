@@ -15,6 +15,7 @@ import random
 from typing import Dict, List, Tuple
 
 from .clawd import CLAWD_PALETTE, Sprite, _canvas
+from .rotation import ShuffleBag
 
 # Laptop palette (uppercase keys, so they don't collide with Clawd's lowercase set).
 CLAWD_PALETTE["G"] = (138, 142, 156)   # laptop body / keys
@@ -373,6 +374,10 @@ _WORK_HOLD_MS = 4500
 # the special looks in. Keyboard stays the default; specials are the seasoning.
 _WORK_SPECIAL_CHANCE = 0.35
 
+# Draw the special looks from a shuffle-bag so they rotate through the full set in
+# random order without clumping (a plain random pick repeats — see rotation.py).
+_WORK_BAG = ShuffleBag(WORK_SPECIALS)
+
 
 def _hold(scene: List[Tuple[Sprite, int]], target_ms: int = _WORK_HOLD_MS) -> List[Tuple[Sprite, int]]:
     """Repeat a scene to about `target_ms` so a look reads as a held pose."""
@@ -387,5 +392,5 @@ def coding_loop() -> List[Tuple[Sprite, int]]:
     the whiteboard or talks it through with the duck, then settles back to typing."""
     seq = _hold(SCENES[DEFAULT_CODING_SCENE])          # standard: at the keyboard
     if random.random() < _WORK_SPECIAL_CHANCE:         # …then occasionally, a special
-        seq = seq + _hold(SCENES[random.choice(WORK_SPECIALS)])
+        seq = seq + _hold(SCENES[_WORK_BAG.draw()])    # rotated, not clumped
     return seq
