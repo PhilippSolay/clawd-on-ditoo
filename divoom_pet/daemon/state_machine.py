@@ -36,9 +36,13 @@ AUTO_TIMEOUTS = {
     State.POKE: (1.6, State.IDLE),
 }
 
+# Idle -> Sporty after N seconds: he gets restless and works out before napping.
+IDLE_TO_BORED_AFTER = 60.0
+
 # Idle -> Sleeping after N seconds with no activity. Generous so Clawd stays
 # awake through normal reading/thinking pauses and only naps when you've left.
-IDLE_TO_SLEEP_AFTER = 240.0
+# Between BORED and SLEEP he's in the SPORTY state (jump rope, push-ups, …).
+IDLE_TO_SLEEP_AFTER = 300.0
 
 
 @dataclass
@@ -46,6 +50,7 @@ class PetController:
     bridge: DitooBridge
     sounds: Optional[SoundPlayer] = None
     brightness: int = 70
+    idle_to_bored: float = IDLE_TO_BORED_AFTER
     idle_to_sleep: float = IDLE_TO_SLEEP_AFTER
     idle_opts: IdleOpts = field(default_factory=lambda: DEFAULT_IDLE)
     _state: State = State.IDLE
@@ -259,8 +264,25 @@ class PetController:
                     self._state_changed.set()
                     return
 
-            if current == State.IDLE and idle_for >= self.idle_to_sleep:
-                log.info("idle for %.0fs -> sleeping", idle_for)
-                self._state = State.SLEEPING
+            # Idle-life ladder: IDLE --(bored)--> SPORTY --(sleep)--> SLEEPING.
+            # We mutate _state directly (not set_state) so _last_activity_at is left
+            # untouched and the idle clock keeps counting toward the next rung.
+            def _go(state: State) -> None:
+                self._state = state
                 self._state_started_at = now
                 self._state_changed.set()
+
+            if current == State.IDLE:
+                if idle_for >= self.idle_to_sleep:  # sleep threshold first (handles bored>=sleep)
+                    log.info("idle for %.0fs -> sleeping", idle_for)
+                    _go(State.SLEEPING)
+                elif idle_for >= self.idle_to_bored:
+                    log.info("idle for %.0fs -> sporty (bored, working out)", idle_for)
+                    _go(State.SPORTY)
+            elif current == State.SPORTY:
+                if idle_for >= self.idle_to_sleep:
+                    log.info("worked out until %.0fs idle -> sleeping", idle_for)
+                    _go(State.SLEEPING)
+                elif idle_for < self.idle_to_bored:
+                    log.info("activity resumed mid-workout -> idle")
+                    _go(State.IDLE)

@@ -13,7 +13,9 @@ class DefaultsTests(unittest.TestCase):
         c = Config()
         self.assertTrue(c.sounds.enabled)
         self.assertEqual(c.animations.brightness, 70)
-        self.assertEqual(c.sleep.idle_to_sleep_seconds, 240.0)
+        self.assertEqual(c.sleep.idle_to_bored_seconds, 60.0)   # gets restless after 1 min
+        self.assertEqual(c.sleep.idle_to_sleep_seconds, 300.0)  # naps after 5 min
+        self.assertLess(c.sleep.idle_to_bored_seconds, c.sleep.idle_to_sleep_seconds)
         self.assertEqual(c.device.channel, 2)
 
     def test_round_trip_dict(self):
@@ -49,6 +51,9 @@ class NormalizationTests(unittest.TestCase):
 
     def test_sleep_floor(self):
         self.assertEqual(Config.from_dict({"sleep": {"idle_to_sleep_seconds": 1}}).sleep.idle_to_sleep_seconds, 10.0)
+
+    def test_bored_floor(self):
+        self.assertEqual(Config.from_dict({"sleep": {"idle_to_bored_seconds": 0}}).sleep.idle_to_bored_seconds, 5.0)
 
     def test_fidget_frequency_clamped(self):
         self.assertEqual(Config.from_dict({"animations": {"fidget_frequency": 99}}).animations.fidget_frequency, 3.0)

@@ -132,11 +132,45 @@ def render_showcase(out_dir: str = "previews") -> List[Path]:
     return written
 
 
+def render_sports(out_dir: str = "previews/sports") -> List[Path]:
+    """Render one looping GIF per exercise in Clawd's bored-idle workout (jump rope,
+    push-ups, dumbbell press, jumping jacks, shadowboxing). Returns written paths."""
+    from divoom_pet.sprites.sports import SCENES, SPORT_ORDER
+
+    out = Path(out_dir)
+    out.mkdir(parents=True, exist_ok=True)
+    written: List[Path] = []
+    for name in SPORT_ORDER:
+        frames: Anim = [(compose(sprite), ms) for sprite, ms in SCENES[name]]
+        path = out / f"{name}.gif"
+        save_gif(frames, path)
+        written.append(path)
+    return written
+
+
+def render_coding(out_dir: str = "previews/coding") -> List[Path]:
+    """Render one looping GIF per working look Clawd rotates through while coding
+    (keyboard, rubber-duck debugging, whiteboard, reading docs). Returns paths."""
+    from divoom_pet.sprites.coding import SCENES, WORK_ROTATION
+
+    out = Path(out_dir)
+    out.mkdir(parents=True, exist_ok=True)
+    written: List[Path] = []
+    for name in WORK_ROTATION:
+        frames: Anim = [(compose(sprite), ms) for sprite, ms in SCENES[name]]
+        path = out / f"{name}.gif"
+        save_gif(frames, path)
+        written.append(path)
+    return written
+
+
 if __name__ == "__main__":
     import sys
 
     target = sys.argv[1] if len(sys.argv) > 1 else "previews"
     paths = render_showcase(target)
-    print(f"wrote {len(paths)} live-content previews to {target}/:")
+    paths += render_sports(str(Path(target) / "sports"))
+    paths += render_coding(str(Path(target) / "coding"))
+    print(f"wrote {len(paths)} previews to {target}/:")
     for p in paths:
         print(f"  {p}")

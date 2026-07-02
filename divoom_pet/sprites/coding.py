@@ -11,15 +11,19 @@ animation: a list of (Sprite, duration_ms). Exposed as playable "scenes".
 
 from __future__ import annotations
 
-from typing import Dict, List, Tuple
+import time
+from typing import Dict, List, Optional, Tuple
 
 from .clawd import CLAWD_PALETTE, Sprite, _canvas
+from .rotation import ShuffleBag
 
 # Laptop palette (uppercase keys, so they don't collide with Clawd's lowercase set).
 CLAWD_PALETTE["G"] = (138, 142, 156)   # laptop body / keys
-CLAWD_PALETTE["L"] = (198, 201, 212)   # bezel / lid edge
-CLAWD_PALETTE["S"] = (18, 22, 40)      # dark screen
-CLAWD_PALETTE["E"] = (108, 212, 138)   # green code text
+CLAWD_PALETTE["L"] = (198, 201, 212)   # bezel / lid edge / whiteboard frame
+CLAWD_PALETTE["S"] = (18, 22, 40)      # dark screen / marker ink / book text
+CLAWD_PALETTE["E"] = (108, 212, 138)   # green code text / a checkmark
+CLAWD_PALETTE["D"] = (240, 214, 92)    # rubber-duck yellow (brighter than 'a')
+CLAWD_PALETTE["N"] = (232, 232, 224)   # whiteboard / open-book paper (bright)
 # (reuses 'a' = Anthropic yellow, 'w' = white, 'o' = orange crab, 'k' = pupil)
 
 
@@ -226,6 +230,96 @@ CRAB_TOOL_A = _crab(".o.SaaaaaaaS.o..", ".o.Sa.aaa.aS.o..")   # tool — gear
 CRAB_TOOL_B = _crab(".o.Saa.a.aaS.o..", ".o.SaaaaaaaS.o..")   # gear pulse
 
 
+# ---------- three more ways to work (besides the keyboard) ----------
+# All share the same front-facing head + shell (rows 0-6) as the crab-type scenes,
+# so they read as the same crab — just a different way of getting the work done.
+
+_HEAD = _CRAB_TOP[:7]   # eyes + shell, rows 0-6
+
+
+def _working(*body_rows: str):
+    """Build a front-facing working crab: the shared head/shell + 9 rows of props."""
+    return _canvas(_HEAD + list(body_rows))
+
+
+# 1. Rubber-duck debugging: he explains the bug to a little yellow duck. The duck
+#    faces him (beak left); his right claw gestures as he "talks it through".
+DUCK_TALK = _working(
+    ".oo.......o.....",   # left claw at rest, right claw raised (gesturing)
+    "..........o.....",
+    "..........DDD...",   # duck: head
+    "........ooDkD...",   # beak (o) points back at the crab + eye (k)
+    "........ooDDDD..",   # bill + body
+    "..........DDDD..",   # body
+    "...........DD...",   # tail
+    "................",
+    "................",
+)
+DUCK_LISTEN = _working(
+    ".oo......o......",   # claw lowered a beat (mid-gesture)
+    "...............a",   # a little "!" of insight, top-right
+    "..........DDD...",
+    ".........DDkD...",   # duck blinks forward (eye shifted)
+    "........ooDDDD..",
+    "..........DDDD..",
+    "...........DD...",
+    "................",
+    "................",
+)
+
+
+# 2. Whiteboard architecting: two boxes joined by an arrow on a framed board he
+#    holds up; the marker claw taps a box, then a green check lands when it clicks.
+WHITEBOARD_DRAW = _working(
+    ".oo........oo...",   # arms hold the board
+    "..LLLLLLLLLLLL..",   # board frame — top
+    "..LNNNNNNNNNNL..",   # blank paper
+    "..LNSSNSSNSSNL..",   # box — box — box (a little pipeline)
+    "..LNSNNNNNNSNL..",   # arrow shaft between the outer boxes
+    "..LNSSNSSNSSNL..",   # box bottoms
+    "..LNNNNNNNNNNL..",
+    "..LLLLLLLLLLLL..",   # board frame — bottom
+    "................",
+)
+WHITEBOARD_CHECK = _working(
+    ".oo........oo...",
+    "..LLLLLLLLLLLL..",
+    "..LNNNNNNNNNNL..",
+    "..LNSSNSSNSSNL..",
+    "..LNSNNEENNSNL..",   # a green check lands on the link — it all connects
+    "..LNSSNSSNSSNL..",
+    "..LNNNNNNNNNNL..",
+    "..LLLLLLLLLLLL..",
+    "................",
+)
+
+
+# 3. Reading the docs: an open book held up, eyes scanning the pages. A line of
+#    text "advances" between frames to sell the reading.
+READING_A = _working(
+    ".oo........oo...",   # arms hold the book open
+    ".oNNNNNNNNNNNNo.",   # page top
+    ".oNSSSNNSSSSNNo.",   # text — left page / right page (spine at center)
+    ".oNSSNNNSSSNNNo.",
+    ".oNSSSNNSSNNNNo.",
+    ".oNSNNNNSSSSNNo.",
+    ".oNNNNNNNNNNNNo.",   # page bottom
+    "..o..........o..",
+    "................",
+)
+READING_B = _working(
+    ".oo........oo...",
+    ".oNNNNNNNNNNNNo.",
+    ".oNSNNNNSSNNNNo.",   # text shifted — a line has been read
+    ".oNSSSNNSSSSNNo.",
+    ".oNSSNNNSSNNNNo.",
+    ".oNSSSNNSSSNNNo.",
+    ".oNNNNNNNNNNNNo.",
+    "..o..........o..",
+    "................",
+)
+
+
 # ---------- registry ----------
 
 CODING_SPRITES: Dict[str, Sprite] = {
@@ -233,6 +327,12 @@ CODING_SPRITES: Dict[str, Sprite] = {
     "crab_type_b": Sprite("crab_type_b", CRAB_TYPE_B),
     "crab_tool_a": Sprite("crab_tool_a", CRAB_TOOL_A),
     "crab_tool_b": Sprite("crab_tool_b", CRAB_TOOL_B),
+    "duck_talk": Sprite("duck_talk", DUCK_TALK),
+    "duck_listen": Sprite("duck_listen", DUCK_LISTEN),
+    "whiteboard_draw": Sprite("whiteboard_draw", WHITEBOARD_DRAW),
+    "whiteboard_check": Sprite("whiteboard_check", WHITEBOARD_CHECK),
+    "reading_a": Sprite("reading_a", READING_A),
+    "reading_b": Sprite("reading_b", READING_B),
     "laptop_tool_a": Sprite("laptop_tool_a", LAPTOP_TOOL_A),
     "laptop_tool_b": Sprite("laptop_tool_b", LAPTOP_TOOL_B),
     "laptop_a": Sprite("laptop_a", LAPTOP_A),
@@ -249,6 +349,10 @@ SCENES: Dict[str, List[Tuple[Sprite, int]]] = {
     "crabtype": [(CODING_SPRITES["crab_type_a"], 240), (CODING_SPRITES["crab_type_b"], 240)],
     # Tool call: same crab body as `crabtype`, gear pulsing on screen.
     "crabtool": [(CODING_SPRITES["crab_tool_a"], 280), (CODING_SPRITES["crab_tool_b"], 280)],
+    # Three more ways he works — for ambient variety while coding.
+    "rubberduck": [(CODING_SPRITES["duck_talk"], 460), (CODING_SPRITES["duck_listen"], 520)],
+    "whiteboard": [(CODING_SPRITES["whiteboard_draw"], 620), (CODING_SPRITES["whiteboard_check"], 620)],
+    "reading": [(CODING_SPRITES["reading_a"], 560), (CODING_SPRITES["reading_b"], 560)],
     # The earlier "peeking over the laptop" scenes, kept as playable options.
     "laptop": [(CODING_SPRITES["laptop_a"], 240), (CODING_SPRITES["laptop_b"], 240)],
     "terminal": [(CODING_SPRITES["term_a"], 520), (CODING_SPRITES["term_b"], 520)],
@@ -259,3 +363,58 @@ SCENES: Dict[str, List[Tuple[Sprite, int]]] = {
 # Which scene the looping `coding` state shows, and which the tool_use state uses.
 DEFAULT_CODING_SCENE = "crabtype"
 DEFAULT_TOOL_SCENE = "crabtool"
+
+# The special working looks mixed into the standard keyboard loop for variety.
+WORK_SPECIALS = ["rubberduck", "whiteboard", "reading"]
+
+# Roughly how long to hold one working look (~4-5s) before the next loop cycle.
+_WORK_HOLD_MS = 4500
+
+# About once a minute of working, Clawd breaks from the keyboard to do a special
+# look. Time-based (not per-cycle odds) so it survives the constant coding<->tool
+# flipping of a real session — otherwise the special never gets a turn.
+_WORK_SPECIAL_EVERY_S = 60.0
+
+# Draw the special looks from a shuffle-bag so they rotate through the full set in
+# random order without clumping (a plain random pick repeats — see rotation.py).
+_WORK_BAG = ShuffleBag(WORK_SPECIALS)
+
+# Wall-clock of the last special shown (None until the first working cycle). A
+# 1-element list so the module-level timer is a mutable holder, not a global-rebind.
+_last_work_special: List[Optional[float]] = [None]
+
+
+def _reset_work_special_clock(value: Optional[float] = None) -> None:
+    """Reset the 'time since last special' clock (used by tests)."""
+    _last_work_special[0] = value
+
+
+def _work_special_due(now: float) -> bool:
+    """True at most once per _WORK_SPECIAL_EVERY_S — and records that it fired."""
+    last = _last_work_special[0]
+    if last is None:                       # first working cycle: start the clock, no special yet
+        _last_work_special[0] = now
+        return False
+    if now - last >= _WORK_SPECIAL_EVERY_S:
+        _last_work_special[0] = now
+        return True
+    return False
+
+
+def _hold(scene: List[Tuple[Sprite, int]], target_ms: int = _WORK_HOLD_MS) -> List[Tuple[Sprite, int]]:
+    """Repeat a scene to about `target_ms` so a look reads as a held pose."""
+    beat = sum(ms for _, ms in scene) or 1
+    return scene * max(1, round(target_ms / beat))
+
+
+def coding_loop(now: Optional[float] = None) -> List[Tuple[Sprite, int]]:
+    """One working cycle. Mostly a stretch at the keyboard — but about once a minute
+    it *leads* with a special look (rubber-duck debugging, whiteboard, docs) before
+    settling back to the keyboard. Leading (not trailing) means the special still
+    shows even when a tool call cuts the coding stretch short a second later. The
+    CODING state calls this fresh each loop; `now` is injectable for tests."""
+    now = time.time() if now is None else now
+    if _work_special_due(now):
+        # Special first (rotated, not clumped), then back to the keyboard.
+        return _hold(SCENES[_WORK_BAG.draw()]) + _hold(SCENES[DEFAULT_CODING_SCENE])
+    return _hold(SCENES[DEFAULT_CODING_SCENE])

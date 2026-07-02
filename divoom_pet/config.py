@@ -64,7 +64,10 @@ class AnimationsCfg:
 
 @dataclass(frozen=True)
 class SleepCfg:
-    idle_to_sleep_seconds: float = 240.0  # nap after this long with no activity
+    # After this long idle, Clawd gets restless and works out (jump rope, push-ups…).
+    idle_to_bored_seconds: float = 60.0
+    # …and after this long idle, the workout's over and he naps.
+    idle_to_sleep_seconds: float = 300.0
 
 
 @dataclass(frozen=True)
@@ -111,6 +114,7 @@ class Config:
             ),
             sleep=replace(
                 self.sleep,
+                idle_to_bored_seconds=_clamp(float(self.sleep.idle_to_bored_seconds), 5.0, 36000.0),
                 idle_to_sleep_seconds=_clamp(float(self.sleep.idle_to_sleep_seconds), 10.0, 36000.0),
             ),
         )
