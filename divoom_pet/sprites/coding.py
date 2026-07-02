@@ -11,8 +11,8 @@ animation: a list of (Sprite, duration_ms). Exposed as playable "scenes".
 
 from __future__ import annotations
 
-import random
-from typing import Dict, List, Tuple
+import time
+from typing import Dict, List, Optional, Tuple
 
 from .clawd import CLAWD_PALETTE, Sprite, _canvas
 from .rotation import ShuffleBag
@@ -370,13 +370,35 @@ WORK_SPECIALS = ["rubberduck", "whiteboard", "reading"]
 # Roughly how long to hold one working look (~4-5s) before the next loop cycle.
 _WORK_HOLD_MS = 4500
 
-# Per cycle, the chance that — after a stretch at the keyboard — Clawd mixes one of
-# the special looks in. Keyboard stays the default; specials are the seasoning.
-_WORK_SPECIAL_CHANCE = 0.35
+# About once a minute of working, Clawd breaks from the keyboard to do a special
+# look. Time-based (not per-cycle odds) so it survives the constant coding<->tool
+# flipping of a real session — otherwise the special never gets a turn.
+_WORK_SPECIAL_EVERY_S = 60.0
 
 # Draw the special looks from a shuffle-bag so they rotate through the full set in
 # random order without clumping (a plain random pick repeats — see rotation.py).
 _WORK_BAG = ShuffleBag(WORK_SPECIALS)
+
+# Wall-clock of the last special shown (None until the first working cycle). A
+# 1-element list so the module-level timer is a mutable holder, not a global-rebind.
+_last_work_special: List[Optional[float]] = [None]
+
+
+def _reset_work_special_clock(value: Optional[float] = None) -> None:
+    """Reset the 'time since last special' clock (used by tests)."""
+    _last_work_special[0] = value
+
+
+def _work_special_due(now: float) -> bool:
+    """True at most once per _WORK_SPECIAL_EVERY_S — and records that it fired."""
+    last = _last_work_special[0]
+    if last is None:                       # first working cycle: start the clock, no special yet
+        _last_work_special[0] = now
+        return False
+    if now - last >= _WORK_SPECIAL_EVERY_S:
+        _last_work_special[0] = now
+        return True
+    return False
 
 
 def _hold(scene: List[Tuple[Sprite, int]], target_ms: int = _WORK_HOLD_MS) -> List[Tuple[Sprite, int]]:
@@ -385,12 +407,14 @@ def _hold(scene: List[Tuple[Sprite, int]], target_ms: int = _WORK_HOLD_MS) -> Li
     return scene * max(1, round(target_ms / beat))
 
 
-def coding_loop() -> List[Tuple[Sprite, int]]:
-    """One working cycle: a stretch at the keyboard, and *sometimes* a special look
-    (rubber-duck debugging, whiteboard, docs) mixed in after it. The CODING state
-    calls this fresh each loop, so Clawd mostly types but every so often gets up to
-    the whiteboard or talks it through with the duck, then settles back to typing."""
-    seq = _hold(SCENES[DEFAULT_CODING_SCENE])          # standard: at the keyboard
-    if random.random() < _WORK_SPECIAL_CHANCE:         # …then occasionally, a special
-        seq = seq + _hold(SCENES[_WORK_BAG.draw()])    # rotated, not clumped
-    return seq
+def coding_loop(now: Optional[float] = None) -> List[Tuple[Sprite, int]]:
+    """One working cycle. Mostly a stretch at the keyboard — but about once a minute
+    it *leads* with a special look (rubber-duck debugging, whiteboard, docs) before
+    settling back to the keyboard. Leading (not trailing) means the special still
+    shows even when a tool call cuts the coding stretch short a second later. The
+    CODING state calls this fresh each loop; `now` is injectable for tests."""
+    now = time.time() if now is None else now
+    if _work_special_due(now):
+        # Special first (rotated, not clumped), then back to the keyboard.
+        return _hold(SCENES[_WORK_BAG.draw()]) + _hold(SCENES[DEFAULT_CODING_SCENE])
+    return _hold(SCENES[DEFAULT_CODING_SCENE])

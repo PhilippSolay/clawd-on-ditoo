@@ -86,7 +86,7 @@ Replace `AA:BB:CC:DD:EE:FF` with *your* MAC. We're not putting ours on the inter
 - 👏👏 **clap twice fast** → tuck him in / wake him up
 - 🚶 **wander off ~1 min** → he gets restless and finds something to do: a workout (jump rope, push-ups, dumbbell press, jumping jacks, shadowboxing 🥊) or a wind-down (meditation, a cup of tea 🍵, some yoga). He rolls the dice each time.
 - 😴 **…and ~5 min** → he's had enough, yawns and naps
-- ⌨️ **while you're coding** → he works too, drifting between looks: at the keyboard, at a whiteboard, rubber-duck debugging 🦆, or nose-in-the-docs
+- ⌨️ **while you're coding** → he types at the keyboard, and about once a minute gets up for a change of scene: whiteboard, rubber-duck debugging 🦆, or nose-in-the-docs (rotating, never the same one twice)
 
 ## Settings: he's high-maintenance (lovingly)
 
